@@ -122,6 +122,8 @@ export async function verifySubscriptionPayment(
       });
     }
 
+    const role = paymentData?.metadata?.role;
+
     //-------------------------------------------------------
     // Make sure Paystack returned the same reference
     //-------------------------------------------------------
@@ -212,8 +214,8 @@ export async function verifySubscriptionPayment(
       status: "SUCCESS",
       message:
         "Subscription activated successfully.",
-      subscriptionId:
-        activation.subscriptionId,
+      subscriptionId: activation.subscriptionId,
+      role: metadata.role,
     });
 
   } catch (error) {
@@ -323,8 +325,7 @@ export async function verifySubscriptionPayment(
 //     // Read metadata
 //     //-------------------------------------------------------
 
-//     const metadata =
-//       paymentData.metadata || {};
+//     const metadata = paymentData.metadata || {};
 
 //     const accountId =
 //       metadata.accountId;

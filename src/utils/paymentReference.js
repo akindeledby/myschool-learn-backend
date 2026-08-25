@@ -4,7 +4,7 @@ import crypto from "crypto";
  * Generates a unique payment reference.
  *
  * Example:
- * EXL-20260701-8A3F9C7D2B
+ * MSL-20260701-8A3F9C7D2B
  */
 export function generatePaymentReference() {
   const date = new Date()
@@ -18,5 +18,5 @@ export function generatePaymentReference() {
       .toString("hex")
       .toUpperCase();
 
-  return `EXL-${date}-${random}`;
+  return `MSL-${date}-${random}`;
 }
