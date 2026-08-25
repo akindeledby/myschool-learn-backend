@@ -1,0 +1,1604 @@
+import { db } from "../../lib/db.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { sendEmail } from "../../src/services/email.service.js";
+
+
+function generateVerificationCode() {
+  return crypto
+    .randomInt(100000, 1000000)
+    .toString();
+}
+
+
+async function generateUniqueInvitationCode() {
+  while (true) {
+    const randomPart = crypto
+      .randomBytes(5)
+      .toString("hex")
+      .toUpperCase();
+
+    const invitationCode = `MSL-${randomPart}`;
+
+    const existingUser =
+      await db.user.findFirst({
+        where: {
+          invitationCode,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (!existingUser) {
+      return invitationCode;
+    }
+  }
+}
+
+// ===================== GOOGLE LOGIN =====================
+export async function googleAuth(req, res) {
+  try {
+    // console.time("google-controller");
+
+    const { email, name, googleId } = req.body;
+    const schoolId =
+      req.school?.id || null;
+
+    if (!email) {
+      return res.status(400).json({
+        error: "Email required",
+      });
+    }
+
+    let user = await db.user.findUnique({
+      where: { 
+        email,
+        schoolId
+       },
+    });
+
+    // ================= EXISTING USER =================
+    if (user) {
+      if (!user.googleId && googleId) {
+        user = await db.user.update({
+          where: { email },
+          data: { googleId },
+        });
+      }
+
+      // ✅ CREATE TOKEN ALWAYS
+      const accessToken = jwt.sign(
+        {
+          userId: user.id,
+          role: user.role ?? null,
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+
+      // 🚨 ROLE NOT YET SELECTED
+      if (!user.role) {
+        return res.json({
+          user: {
+            id: user.id,
+            email: user.email,
+          },
+          success: true,
+          requiresRoleSelection: true,
+          accessToken,
+        });
+      }
+
+      // ✅ NORMAL LOGIN
+      return res.json({
+        success: true,
+        user,
+        accessToken,
+      });
+    }
+
+    // ================= NEW USER =================
+    const newUser = await db.user.create({
+      data: {
+        email,
+        firstName: name?.split(" ")[0] || "Google",
+        lastName: name?.split(" ")[1] || "",
+        password: null,
+        role: null,
+        googleId: googleId || null,
+        schoolId: schoolId
+      },
+    });
+
+    const accessToken = jwt.sign(
+      {
+        userId: newUser.id,
+        role: null,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+
+    return res.json({
+      success: true,
+      requiresRoleSelection: true,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+      },
+      accessToken,
+    });
+
+
+  } catch (error) {
+    console.error("GOOGLE BACKEND ERROR:", error);
+
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+}
+
+// ===================== REGISTER =====================
+export async function register(req, res) {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      invitationCode,
+    } = req.body;
+
+
+    const schoolId =
+      req.school?.id || null;
+
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password
+    ) {
+      return res.status(400).json({
+        error: "All required fields must be provided.",
+      });
+    }
+
+
+    const cleanFirstName = firstName.trim();
+
+    const cleanLastName = lastName.trim();
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    const cleanPassword = password.trim();
+
+    const cleanInvitationCode =
+      typeof invitationCode === "string"
+        ? invitationCode.trim().toUpperCase()
+        : "";
+
+    const existingUser =
+      await db.user.findFirst({
+        where: {
+          email: cleanEmail,
+          ...(schoolId
+            ? { schoolId }
+            : {}),
+        },
+        select: {
+          id: true,
+          email: true,
+        },
+      });
+
+    if (existingUser) {
+      return res.status(400).json({
+        error:
+          "An account with this email already exists.",
+      });
+    }
+
+
+    let invitedById = null;
+
+    if (cleanInvitationCode) {
+      const invitingUser =
+        await db.user.findFirst({
+          where: {
+            invitationCode: cleanInvitationCode,
+          },
+          select: {
+            id: true,
+            invitationCode: true,
+          },
+        });
+
+      if (!invitingUser) {
+        return res.status(400).json({
+          error:
+            "The invitation code is invalid or no longer available.",
+        });
+      }
+
+      invitedById =
+        invitingUser.id;
+    }
+
+    const hashedPassword =
+      await bcrypt.hash(
+        cleanPassword,
+        10
+      );
+
+    const newInvitationCode =
+      await generateUniqueInvitationCode();
+
+    const user =
+      await db.user.create({
+        data: {
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          email: cleanEmail,
+          password: hashedPassword,
+          role: null,
+          schoolId,
+          invitationCode: newInvitationCode,
+          invitationCreatedAt: new Date(),
+          invitedById: invitedById,
+          invitedAt:
+            invitedById
+              ? new Date()
+              : null,
+        },
+
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          invitationCode: true,
+          invitedById: true,
+          createdAt: true,
+        },
+      });
+
+
+    // ========================================================
+    // GENERATE JWT
+    // ========================================================
+
+    const accessToken =
+      jwt.sign(
+        {
+          userId: user.id,
+          role: user.role ?? null,
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(201).json({
+      message: "Account created successfully.",
+      requiresRoleSelection: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        invitationCode: user.invitationCode,
+        invitedById: user.invitedById,
+      },
+
+      accessToken,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error:
+        "Unable to create account. Please try again later.",
+    });
+  }
+}
+
+// ===================== LOGIN =====================
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    const schoolId =
+      req.school?.id || null;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error:
+          "Email and password are required",
+      });
+    }
+
+    const passwordTrim = password.trim();
+
+    const user =
+      await db.user.findFirst({
+        where: {
+          email: email.trim(),
+          schoolId,
+        },
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    if (!user.password) {
+      return res.status(400).json({
+        error:
+          "This account uses Google. Please sign in with Google.",
+      });
+    }
+
+    const isValid =
+      await bcrypt.compare(
+        passwordTrim,
+        user.password
+      );
+
+    if (!isValid) {
+      return res.status(401).json({
+        error:
+          "Invalid credentials",
+      });
+    }
+
+    const accessToken = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role ?? null,
+      },
+        process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // User has not selected role yet
+    if (!user.role) {
+      return res.json({
+        requiresRoleSelection: true,
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+        },
+      });
+    }
+
+    // Parent must select profile
+    if (user.role === "PARENT") {
+      return res.json({
+        requiresProfileSelection: true,
+        accessToken,
+        user,
+      });
+    }
+
+    return res.json({
+      message:
+        "Login successful",
+      accessToken,
+      user,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+}
+
+
+// ===================== SET-USER-ROLE =====================
+export async function setUserRole(req, res) {
+  try {
+    const domainSchoolId = req.school?.id || null;
+
+    const {
+      role,
+      gender,
+      teacherCode,
+      age,
+      schoolId: selectedSchoolId,
+      classId,
+      studentCategory,
+      subjectTaught,
+      phoneNumber,
+      schoolEmail,
+      address,
+      website,
+    } = req.body;
+
+    const effectiveSchoolId = selectedSchoolId || domainSchoolId || null;
+
+    if (!role) {
+      return res.status(400).json({
+        error: "Role is required",
+      });
+    }
+
+    const validRoles = [
+      "teacher",
+      "student",
+      "parent",
+      "school",
+    ];
+
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        error: "Invalid role selected",
+      });
+    }
+
+    const existingUser =
+      await db.user.findUnique({
+        where: {
+          id: req.user.userId,
+        },
+        include: {
+          teacher: true,
+          student: true,
+          parent: true,
+          school: true,
+          account: true,
+        },
+      });
+
+    if (!existingUser) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    // let schoolRecord = null;
+
+    // if (schoolId) {
+    //   schoolRecord =
+    //     await db.school.findUnique({
+    //       where: {
+    //         id: schoolId,
+    //       },
+    //     });
+
+    //   if (!schoolRecord) {
+    //     return res.status(400).json({
+    //       error:
+    //         "School is not onboarded or does not exist",
+    //     });
+    //   }
+    // }
+
+    let schoolRecord = null;
+
+    if (effectiveSchoolId) {
+      schoolRecord = await db.school.findUnique({
+        where: {
+          id: effectiveSchoolId,
+        },
+      });
+
+      if (!schoolRecord) {
+        return res.status(400).json({
+          error: "Selected school does not exist.",
+        });
+      }
+    }
+
+    async function createAccountWithFreemium(
+      tx,
+      accountType,
+      subscriptionPlanName
+    ) {
+      const account =
+        await tx.account.create({
+          data: {
+            accountType,
+          },
+        });
+
+      const freemiumPlan =
+        await tx.subscriptionPlan.findUnique({
+          where: {
+            subscriptionPlanName,
+          },
+        });
+
+      if (!freemiumPlan) {
+        throw new Error(
+          `${subscriptionPlanName} plan not found`
+        );
+      }
+
+      await tx.subscription.create({
+        data: {
+          account: {
+            connect: {
+              id: account.id,
+            },
+          },
+          subscriptionPlan: {
+            connect: {
+              id: freemiumPlan.id,
+            },
+          },
+          status: "ACTIVE",
+          duration: "LIFETIME",
+          startsAt: new Date(),
+          endsAt: null,
+          numberOfTerms: 0,
+          amountPaid: 0,
+        },
+      });
+
+      return account;
+    }
+
+    const result = await db.$transaction(
+      async (tx) => {
+        /**
+         * SCHOOL ROLE
+         */
+        if (role === "school") {
+          if (!schoolRecord) {
+            throw new Error(
+              "School is not onboarded"
+            );
+          }
+
+          let account =
+            existingUser.account;
+
+          if (!account) {
+            account =
+            await createAccountWithFreemium(
+              tx,
+              "SCHOOL",
+              "FREEMIUM_SCHOOL"
+            );
+          }
+
+          const updatedUser =
+            await tx.user.update({
+              where: {
+                id: existingUser.id,
+              },
+              data: {
+                role: "SCHOOL",
+                accountId: account.id,
+                schoolId:
+                  schoolRecord.id,
+              },
+            });
+
+          const school =
+            await tx.school.update({
+              where: {
+                id: schoolRecord.id,
+              },
+              data: {
+                userId:
+                  existingUser.id,
+                schoolEmail:
+                  schoolEmail ||
+                  schoolRecord.schoolEmail,
+                address:
+                  address ||
+                  schoolRecord.address,
+                website:
+                  website ||
+                  schoolRecord.website,
+                phone:
+                  phoneNumber ||
+                  schoolRecord.phone,
+              },
+            });
+
+          return {
+            user: updatedUser,
+            profile: school,
+            redirectUrl:
+              "/school/dashboard",
+          };
+        }
+
+        /**
+         * TEACHER ROLE
+         */
+        if (role === "teacher") {
+          if (existingUser.teacher) {
+            throw new Error(
+              "Teacher profile already exists"
+            );
+          }
+
+          const updatedUser =
+            await tx.user.update({
+              where: {
+                id: existingUser.id,
+              },
+              data: {
+                role: "TEACHER",
+                schoolId:
+                  schoolRecord?.id ||
+                  null,
+              },
+            });
+
+          const teacher =
+            await tx.teacher.create({
+              data: {
+                userId:
+                  existingUser.id,
+                schoolId:
+                  schoolRecord?.id ||
+                  null,
+                gender:
+                  gender || null,
+                teacherCode:
+                  teacherCode ||
+                  null,
+                subject:
+                  subjectTaught ||
+                  null,
+                phone:
+                  phoneNumber ||
+                  null,
+              },
+            });
+
+          return {
+            user: updatedUser,
+            profile: teacher,
+            redirectUrl:
+              "/teacher/dashboard",
+          };
+        }
+
+        /**
+         * STUDENT ROLE
+         */
+        if (role === "student") {
+          if (existingUser.student) {
+            throw new Error(
+              "Student profile already exists"
+            );
+          }
+
+          let account =
+            existingUser.account;
+
+          if (!account) {
+            account =
+              await createAccountWithFreemium(
+                tx,
+                "INDIVIDUAL",
+                "FREEMIUM_INDIVIDUAL"
+              );
+          }
+
+          let classRecord = null;
+          let classLevel = null;
+
+          if (classId) {
+            classRecord =
+              await tx.class.findUnique({
+                where: {
+                  id: classId,
+                },
+              });
+
+            if (!classRecord) {
+              throw new Error(
+                "Selected class not found"
+              );
+            }
+
+            classLevel =
+              classRecord.name ||
+              classRecord.level ||
+              null;
+          }
+
+          const updatedUser =
+            await tx.user.update({
+              where: {
+                id: existingUser.id,
+              },
+              data: {
+                role: "STUDENT",
+                accountId:
+                  account.id,
+                schoolId:
+                  schoolRecord?.id ||
+                  null,
+              },
+            });
+
+          const student =
+            await tx.student.create({
+              data: {
+                userId:
+                  existingUser.id,
+                accountId:
+                  account.id,
+                schoolId: schoolRecord?.id || null,
+                firstName:
+                  existingUser.firstName,
+                lastName:
+                  existingUser.lastName,
+                gender:
+                  gender || null,
+                age: age
+                  ? Number(age)
+                  : null,
+                classId:
+                  classRecord?.id ||
+                  null,
+                classLevel,
+                category:
+                  studentCategory ||
+                  null,
+                phone:
+                  phoneNumber ||
+                  null,
+              },
+            });
+
+          return {
+            user: updatedUser,
+            profile: student,
+            studentId:
+              student.id,
+            redirectUrl:
+              "/student/dashboard",
+          };
+        }
+
+        /**
+         * PARENT ROLE
+         */
+        if (role === "parent") {
+          if (existingUser.parent) {
+            throw new Error(
+              "Parent profile already exists"
+            );
+          }
+
+          let account =
+            existingUser.account;
+
+          if (!account) {
+            account =
+              await createAccountWithFreemium(
+                tx,
+                "FAMILY",
+                "FREEMIUM_FAMILY"
+              );
+          }
+
+          const updatedUser =
+            await tx.user.update({
+              where: {
+                id: existingUser.id,
+              },
+              data: {
+                role: "PARENT",
+                accountId:
+                  account.id,
+                schoolId:
+                  schoolRecord?.id ||
+                  null,
+              },
+            });
+
+          const parent =
+            await tx.parent.create({
+              data: {
+                userId:
+                  existingUser.id,
+                schoolId:
+                  schoolRecord?.id ||
+                  null,
+                phone:
+                  phoneNumber ||
+                  null,
+                firstName:
+                  existingUser.firstName,
+                lastName:
+                  existingUser.lastName,
+              },
+            });
+
+          return {
+            user: updatedUser,
+            profile: parent,
+            redirectUrl:
+              "/parent/dashboard",
+          };
+        }
+
+        throw new Error(
+          "Unable to process role"
+        );
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile setup completed successfully",
+      redirectUrl: result.redirectUrl,
+      user: result.user,
+      profile: result.profile,
+      studentId: result.studentId || null,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+}
+
+// ===================== GETME =====================
+export async function getMe(req, res) {
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        id: req.user.userId,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    return res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+}
+
+// ===================== FORGOT PASSWORD =====================
+export async function forgotPassword(req, res) {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: "Email is required.",
+      });
+    }
+
+    const normalizedEmail =
+      email.trim().toLowerCase();
+
+    const user =
+      await db.user.findUnique({
+        where: {
+          email: normalizedEmail,
+        },
+
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+        },
+      });
+
+    /*
+     * Do not reveal whether the account exists.
+     */
+    if (!user) {
+      return res.json({
+        success: true,
+      });
+    }
+
+    /*
+     * Generate a new verification code.
+     */
+    const code =
+      generateVerificationCode();
+
+    /*
+     * Never store the verification code
+     * directly in the database.
+     */
+    const codeHash =
+      await bcrypt.hash(code, 10);
+
+    /*
+     * Code expires after 10 minutes.
+     */
+    const expiresAt =
+      new Date(
+        Date.now() +
+          10 * 60 * 1000
+      );
+
+    /*
+     * Save the hashed verification code.
+     */
+    await db.passwordReset.create({
+      data: {
+        userId: user.id,
+        codeHash,
+        expiresAt,
+      },
+    });
+
+    /*
+     * Customized password reset email.
+     */
+    const subject =
+      "MySchoolLearn Password Reset Code";
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+          />
+
+          <title>
+            MySchoolLearn Password Reset
+          </title>
+        </head>
+
+        <body
+          style="
+            margin: 0;
+            padding: 0;
+            background-color: #f1f5f9;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #334155;
+          "
+        >
+
+          <div
+            style="
+              width: 100%;
+              padding: 40px 16px;
+              box-sizing: border-box;
+            "
+          >
+
+            <div
+              style="
+                max-width: 560px;
+                margin: 0 auto;
+                background: #ffffff;
+                border-radius: 16px;
+                overflow: hidden;
+                box-shadow:
+                  0 10px 30px rgba(15, 23, 42, 0.08);
+              "
+            >
+
+              <!-- Header -->
+
+              <div
+                style="
+                  background: linear-gradient(
+                    135deg,
+                    #2563eb,
+                    #4f46e5
+                  );
+                  padding: 32px 24px;
+                  text-align: center;
+                "
+              >
+
+                <div
+                  style="
+                    color: #ffffff;
+                    font-size: 28px;
+                    font-weight: 800;
+                    letter-spacing: -0.5px;
+                  "
+                >
+                  MySchoolLearn
+                </div>
+
+                <div
+                  style="
+                    margin-top: 8px;
+                    color: rgba(255,255,255,0.85);
+                    font-size: 14px;
+                  "
+                >
+                  Learning made personal.
+                </div>
+
+              </div>
+
+              <!-- Content -->
+
+              <div
+                style="
+                  padding: 36px 32px;
+                "
+              >
+
+                <h1
+                  style="
+                    margin: 0 0 16px;
+                    color: #0f172a;
+                    font-size: 24px;
+                    line-height: 1.3;
+                  "
+                >
+                  Password Reset Request
+                </h1>
+
+                <p
+                  style="
+                    margin: 0 0 16px;
+                    font-size: 15px;
+                    line-height: 1.7;
+                  "
+                >
+                  Hello ${
+                    user.firstName || "there"
+                  },
+                </p>
+
+                <p
+                  style="
+                    margin: 0 0 20px;
+                    font-size: 15px;
+                    line-height: 1.7;
+                  "
+                >
+                  We received a request to
+                  change the password for your
+                  MySchoolLearn account.
+                </p>
+
+                <p
+                  style="
+                    margin: 0 0 24px;
+                    font-size: 15px;
+                    line-height: 1.7;
+                  "
+                >
+                  Use the verification code below
+                  to continue with your password
+                  reset:
+                </p>
+
+                <!-- Verification Code -->
+
+                <div
+                  style="
+                    margin: 24px 0;
+                    padding: 24px;
+                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    text-align: center;
+                  "
+                >
+
+                  <div
+                    style="
+                      margin-bottom: 10px;
+                      color: #64748b;
+                      font-size: 12px;
+                      font-weight: 600;
+                      text-transform: uppercase;
+                      letter-spacing: 1px;
+                    "
+                  >
+                    Verification Code
+                  </div>
+
+                  <div
+                    style="
+                      color: #1e40af;
+                      font-size: 32px;
+                      font-weight: 800;
+                      letter-spacing: 8px;
+                    "
+                  >
+                    ${code}
+                  </div>
+
+                </div>
+
+                <p
+                  style="
+                    margin: 0 0 20px;
+                    color: #64748b;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    text-align: center;
+                  "
+                >
+                  This verification code will
+                  expire in
+                  <strong>
+                    10 minutes
+                  </strong>.
+                </p>
+
+                <div
+                  style="
+                    margin-top: 28px;
+                    padding: 16px;
+                    background: #fff7ed;
+                    border: 1px solid #fed7aa;
+                    border-radius: 10px;
+                  "
+                >
+
+                  <p
+                    style="
+                      margin: 0;
+                      color: #9a3412;
+                      font-size: 13px;
+                      line-height: 1.6;
+                    "
+                  >
+                    If you did not request a
+                    password reset, you can safely
+                    ignore this email. Your account
+                    password will remain unchanged.
+                  </p>
+
+                </div>
+
+              </div>
+
+              <!-- Footer -->
+
+              <div
+                style="
+                  padding: 24px 32px;
+                  background: #f8fafc;
+                  border-top: 1px solid #e2e8f0;
+                  text-align: center;
+                "
+              >
+
+                <p
+                  style="
+                    margin: 0 0 6px;
+                    color: #64748b;
+                    font-size: 12px;
+                  "
+                >
+                  This email was sent by
+                  MySchoolLearn.
+                </p>
+
+                <p
+                  style="
+                    margin: 0;
+                    color: #94a3b8;
+                    font-size: 11px;
+                  "
+                >
+                  Please do not reply to this
+                  automated email.
+                </p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    /*
+     * Send the email through the dedicated
+     * Resend email service.
+     */
+    await sendEmail({
+      to: user.email,
+      subject,
+      html,
+    });
+
+    return res.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error(
+      "Forgot password error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error:
+        "Unable to process password reset.",
+    });
+  }
+}
+
+export async function verifyPasswordCode(
+  req,
+  res
+) {
+  try {
+    const {
+      email,
+      code,
+    } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Email and verification code are required.",
+      });
+    }
+
+    const user =
+      await db.user.findUnique({
+        where: {
+          email:
+            email.trim().toLowerCase(),
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Invalid verification code.",
+      });
+    }
+
+    const reset =
+      await db.passwordReset.findFirst({
+        where: {
+          userId: user.id,
+          usedAt: null,
+          verifiedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (!reset) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "This verification code has expired.",
+      });
+    }
+
+    if (reset.attempts >= 5) {
+      return res.status(429).json({
+        success: false,
+        error:
+          "Too many verification attempts. Please request a new code.",
+      });
+    }
+
+    const valid =
+      await bcrypt.compare(
+        code.trim(),
+        reset.codeHash
+      );
+
+    if (!valid) {
+      await db.passwordReset.update({
+        where: {
+          id: reset.id,
+        },
+        data: {
+          attempts: {
+            increment: 1,
+          },
+        },
+      });
+
+      return res.status(400).json({
+        success: false,
+        error:
+          "Invalid verification code.",
+      });
+    }
+
+    await db.passwordReset.update({
+      where: {
+        id: reset.id,
+      },
+      data: {
+        verifiedAt: new Date(),
+      },
+    });
+
+    const resetToken =
+      crypto.randomBytes(32).toString("hex");
+
+    /*
+     * Store the reset token securely.
+     *
+     * Better still, hash this token before storing it.
+     */
+
+    const resetTokenHash =
+      crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
+
+    await db.passwordReset.update({
+      where: {
+        id: reset.id,
+      },
+      data: {
+        resetTokenHash,
+      },
+    });
+
+    return res.json({
+      success: true,
+      resetToken,
+    });
+  } catch (error) {
+    console.error(
+      "Verify password code error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error:
+        "Unable to verify the code.",
+    });
+  }
+}
+
+
+export async function resetPassword(
+  req,
+  res
+) {
+  try {
+    const {
+      resetToken,
+      password,
+      confirmPassword,
+    } = req.body;
+
+    if (
+      !resetToken ||
+      !password ||
+      !confirmPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "All fields are required.",
+      });
+    }
+
+    if (
+      password !==
+      confirmPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Passwords do not match.",
+      });
+    }
+
+    const resetTokenHash =
+      crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
+
+    const reset =
+      await db.passwordReset.findFirst({
+        where: {
+          resetTokenHash,
+          verifiedAt: {
+            not: null,
+          },
+          usedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+      });
+
+    if (!reset) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "This password reset session is invalid or expired.",
+      });
+    }
+
+    const passwordHash =
+      await bcrypt.hash(
+        password,
+        12
+      );
+
+    await db.$transaction([
+      db.user.update({
+        where: {
+          id: reset.userId,
+        },
+        data: {
+          password: passwordHash,
+        },
+      }),
+
+      db.passwordReset.update({
+        where: {
+          id: reset.id,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      message:
+        "Password changed successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "Reset password error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error:
+        "Unable to reset password.",
+    });
+  }
+}
+
+
+
+// export async function forgotPassword(req, res) {
+//   try {
+//     const { email } = req.body;
+//     const schoolId =
+//       req.school?.id || null;
+  
+//     if (!email) {
+//       return res.status(400).json({ error: "Email is required" });
+//     }
+
+//     const user = await db.user.findUnique({
+//       where: { 
+//         email,
+//         schoolId
+//       },
+//     });
+
+//     // Always return same response (security)
+//     if (!user) {
+//       return res.json({ message: "If email exists, reset link sent" });
+//     }
+
+//     const accessToken = jwt.sign(
+//       {
+//         userId: user.id,
+//         role: user.role ?? null,
+//       },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "5min" }
+//     );
+
+//     await db.passwordReset.create({
+//       data: {
+//         email,
+//         token,
+//         expiresAt: new Date(Date.now() + 1000 * 60 * 15), // 15 mins
+//       },
+//     });
+
+//     // Replace with real email sending later
+//     console.log(`Reset link: http://localhost:3000/reset-password/${token}`);
+
+//     return res.json({ 
+//       message: "Reset link sent",
+//       accessToken
+//     });
+//   } catch (error) {
+//     return res.status(500).json({ error: error.message });
+//   }
+// }
+
+// // ===================== RESET PASSWORD =====================
+// export async function resetPassword(req, res) {
+//   try {
+//     const { token, password } = req.body;
+//     const schoolId =
+//       req.school?.id || null;
+  
+//     if (!token || !password) {
+//       return res.status(400).json({ error: "Token and password are required" });
+//     }
+
+//     const record = await db.passwordReset.findUnique({
+//       where: { token },
+//     });
+
+//     if (!record || record.expiresAt < new Date()) {
+//       return res.status(400).json({ error: "Invalid or expired token" });
+//     }
+
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     await db.user.update({
+//       where: { email: record.email, schoolId },
+//       data: { password: hashedPassword },
+//     });
+
+//     await db.passwordReset.delete({
+//       where: { token },
+//     });
+
+//     return res.json({ message: "Password updated successfully" });
+//   } catch (error) {
+//     return res.status(500).json({ error: error.message });
+//   }
+// }

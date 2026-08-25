@@ -1,0 +1,22 @@
+{
+  "watch": [
+    "src",
+    "server.js"
+  ],
+
+  "ignore": [
+    "output/*",
+    "uploads/*",
+    "renders/*",
+    "uploads/*",
+    "temp/*",
+    "hls/*",
+    "*.mp4",
+    "*.m3u8",
+    "*.ts",
+    "*.wav",
+    "*.mp3"
+  ],
+
+  "ext": "js,json"
+}
