@@ -167,21 +167,6 @@ export async function verifySubscriptionPayment(
       });
     }
 
-    //-------------------------------------------------------
-    // Activate subscription
-    //-------------------------------------------------------
-    // activateSubscription() performs the important
-    // server-side checks:
-    //
-    // 1. Payment exists in our database
-    // 2. Payment is still PENDING
-    // 3. Currency matches
-    // 4. Amount matches
-    // 5. Reference matches
-    // 6. Subscription plan exists
-    // 7. Duplicate processing is prevented
-    // 8. Subscription + payment update are atomic
-
     const activation =
       await activateSubscription({
         reference,
