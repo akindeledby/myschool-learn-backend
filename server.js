@@ -35,7 +35,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: process.env.FRONTEND_URL,
     credentials: true,
   })
 );
@@ -45,6 +45,11 @@ app.use(express.json());
 
 // ===================== PUBLIC AUTH ROUTES =====================
 // No tenant middleware, no auth middleware here
+// ===================== HEALTH CHECK =====================
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use("/api/auth", authRoutes);
 
 app.use("/api/verify-payment", verifyPaymentRoutes);
@@ -52,7 +57,6 @@ app.use("/api/verify-payment", verifyPaymentRoutes);
 app.use((req, res, next) => {
   next();
 });
-
 
 // ===================== GLOBAL MIDDLEWARE FOR PROTECTED ROUTES =====================
 app.use(tenantMiddleware);
@@ -80,12 +84,6 @@ app.use("/api/gamification/challenges", challengeRoutes);
 app.use("/api/subscription-plans", subscriptionPlanRoutes);
 app.use("/api/payment", paymentRoutes);
 
-
-
-// ===================== HEALTH CHECK =====================
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
-});
 
 const PORT = process.env.PORT || 5000;
 

@@ -524,6 +524,7 @@ model TopicAnalytics {
   @@unique([studentId, topicId])
 }
 
+
 model Subscription {
   id                 String               @id @default(uuid())
   accountId          String               @unique
@@ -536,6 +537,7 @@ model Subscription {
   amountPaid         Decimal              @db.Decimal(10, 2)
   isLifetime         Boolean              @default(false)
   createdAt          DateTime             @default(now())
+
   payments           Payment[]
   account            Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
   subscriptionPlan   SubscriptionPlan     @relation(fields: [subscriptionPlanId], references: [id], onDelete: Cascade)
@@ -559,8 +561,37 @@ model SubscriptionPlan {
   canPlayMillionaire             Boolean                   @default(false)
   canPartakeInLeaderboardRanking Boolean                   @default(false)
   createdAt                      DateTime                  @default(now())
-  subscriptions                  Subscription[]
+
+  subscriptions                 Subscription[]
+  payments                      Payment[]
 }
+
+
+model Payment {
+  id                    String          @id @default(uuid())
+  accountId             String
+  subscriptionId        String?
+  subscriptionPlanId    String
+  reference             String          @unique
+  paystackTransactionId BigInt?         @unique
+  amount                Decimal         @db.Decimal(10, 2)
+  numberOfTerms         Int?
+  currency              String
+  provider              PaymentProvider
+  status                PaymentStatus
+  paidAt                DateTime?
+  createdAt             DateTime        @default(now())
+
+  account               Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subscription          Subscription?   @relation(fields: [subscriptionId], references: [id])
+  subscriptionPlan      SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id])
+
+  @@index([accountId])
+  @@index([subscriptionId])
+  @@index([subscriptionPlanId])
+  @@index([status])
+}
+
 
 model SubscriptionUsage {
   id        String                   @id @default(uuid())
@@ -586,21 +617,6 @@ model UnlockedVideoLesson {
   @@unique([accountId, topicId])
   @@index([accountId])
   @@index([topicId])
-}
-
-model Payment {
-  id             String          @id @default(uuid())
-  accountId      String
-  subscriptionId String
-  reference      String          @unique
-  amount         Decimal         @db.Decimal(10, 2)
-  numberOfTerms  Int?
-  currency       String
-  provider       PaymentProvider
-  status         PaymentStatus
-  createdAt      DateTime        @default(now())
-  account        Account         @relation(fields: [accountId], references: [id])
-  subscription   Subscription    @relation(fields: [subscriptionId], references: [id])
 }
 
 
