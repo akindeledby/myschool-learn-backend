@@ -215,7 +215,7 @@ export async function verifySubscriptionPayment(
       message:
         "Subscription activated successfully.",
       subscriptionId: activation.subscriptionId,
-      role: metadata.role,
+      role,
     });
 
   } catch (error) {
