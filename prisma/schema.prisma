@@ -571,7 +571,7 @@ model Payment {
   id                    String          @id @default(uuid())
   accountId             String
   subscriptionId        String?
-  subscriptionPlanId    String
+  subscriptionPlanId    String?
   reference             String          @unique
   paystackTransactionId BigInt?         @unique
   amount                Decimal         @db.Decimal(10, 2)
@@ -584,7 +584,7 @@ model Payment {
 
   account               Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   subscription          Subscription?   @relation(fields: [subscriptionId], references: [id])
-  subscriptionPlan      SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id])
+  subscriptionPlan      SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
 
   @@index([accountId])
   @@index([subscriptionId])
