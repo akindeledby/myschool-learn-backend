@@ -5,7 +5,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "dev": "concurrently \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon server.js\" \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon --ignore output --ignore uploads src/workers/index.js\"",
+    "dev": "concurrently \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon server.js\" \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon --ignore output --ignore uploads src/workers/index.js\"",
+    "build": "prisma generate",
     "start": "node server.js",
     "start:worker": "node src/workers/index.js"
   },
