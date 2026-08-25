@@ -8,6 +8,7 @@ import "./video.worker.js";
 import "./render-status.worker.js";
 import "./hls.worker.js";
 import "./mediaconvert-status.worker.js"
+import "./question-explanation.worker.js"
 
 
 console.log("✅ All workers started");

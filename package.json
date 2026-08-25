@@ -5,9 +5,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon server.js",
-    "start": "concurrently \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon server.js\" \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon --ignore output --ignore uploads src/workers/index.js\""
+  "dev": "concurrently \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon server.js\" \"cross-env NODE_OPTIONS=--max-old-space-size=4096 nodemon --ignore output --ignore uploads src/workers/index.js\"",
+    "start": "node server.js",
+    "start:worker": "node src/workers/index.js"
   },
   "keywords": [],
   "author": "",
@@ -61,6 +61,7 @@
     "@types/pg": "^8.20.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "nodemon": "^3.1.14",
     "prisma": "^7.8.0"
   },
   "prisma": {
