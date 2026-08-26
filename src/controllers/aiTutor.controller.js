@@ -2,7 +2,6 @@ import { db } from "../../lib/db.js";
 import { classifyQuestion } from "../services/elevenLabs/questionModeration.service.js";
 import { buildTutorPrompt } from "../services/elevenLabs/tutorPrompt.service.js";
 import { verifyConversationOwnership } from "../services/elevenLabs/conversationOwnership.service.js";
-import { buildStudentMemory } from "../services/elevenLabs/buildStudentMemory.service.js";
 import { resolveStudent } from "../services/elevenLabs/studentResolver.service.js";
 import { createConversation, saveMessage, getConversation, getStudentConversations } from "../services/elevenLabs/conversation.service.js";
 import { streamTutorResponse } from "../services/elevenLabs/aiTutorStream.service.js";
@@ -16,6 +15,8 @@ import { checkAchievements } from "../services/elevenLabs/achievement.service.js
 import { checkSubscriptionAccess } from "../services/subscription/subscription.access.js";
 import { SUBSCRIPTION_FEATURES } from "../services/subscription/subscription.constants.js";
 import { generateTutorSpeech } from "../services/audio/tts.service.js";
+
+import { createTutorImage } from "../services/elevenLabs/createTutorImage.js";
 
 
 export function extractCompleteSentences(buffer) {
@@ -363,16 +364,7 @@ START GEMINI STREAM
             speed: 1,
           });
 
-        // pendingSentences.set(
-        //   sequence,
-        //   {
-        //     sequence,
-        //     text: speech?.text || sentence,
-        //     audio: speech?.audioBuffer
-        //       ? speech.audioBuffer.toString("base64")
-        //       : null,
-        //   }
-        // );
+
         pendingSentences.set(
           sequence,
           {
@@ -420,16 +412,6 @@ START GEMINI STREAM
           if (res.flush) {
             res.flush();
           }
-
-          // console.log(
-          //   "[TutorStream] Sentence + audio sent:",
-          //   {
-          //     sequence:
-          //       result.sequence,
-          //     timestamp:
-          //       new Date().toISOString(),
-          //   }
-          // );
 
           nextSequenceToSend++;
         }
@@ -499,12 +481,6 @@ START GEMINI STREAM
         continue;
       }
 
-      // console.log(
-      //   "[Backend] Gemini chunk:",
-      //   new Date().toISOString(),
-      //   JSON.stringify(text)
-      // );
-
       fullResponse += text;
 
       sentenceBuffer += text;
@@ -566,15 +542,73 @@ START GEMINI STREAM
 
     /*
     ==========================================
+    GENERATE OPTIONAL TUTOR IMAGE
+    ==========================================
+    */
+
+    let generatedImage = null;
+
+    try {
+      generatedImage =
+        await createTutorImage({
+          studentMessage: message,
+
+          tutorResponse:
+            fullResponse,
+
+          studentId:
+            student.id,
+
+          conversationId:
+            conversation.id,
+        });
+    } catch (imageError) {
+      console.error(
+        "[TutorStream] Tutor image generation failed:",
+        imageError
+      );
+
+      /*
+      Image failure must not destroy
+      the otherwise successful tutor response.
+      */
+
+      generatedImage = null;
+    }
+
+    /*
+    ==========================================
     SAVE COMPLETE ASSISTANT RESPONSE
     ==========================================
     */
+
+    // await saveMessage({
+    //   conversationId: conversation.id,
+    //   role: "assistant",
+    //   content: fullResponse,
+    // });
 
     await saveMessage({
       conversationId: conversation.id,
       role: "assistant",
       content: fullResponse,
+      images: generatedImage
+        ? [generatedImage]
+        : undefined,
     });
+
+    if (generatedImage) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "image",
+          image: generatedImage,
+        })}\n\n`
+      );
+
+      if (res.flush) {
+        res.flush();
+      }
+    }
 
     await db.tutorConversation.update({
       where: {
@@ -669,822 +703,6 @@ START GEMINI STREAM
     } catch {}
   }
 }
-
-// export async function chatWithTutorStream(req, res) {
-//   try {
-//     const userId = req.user.userId;
-
-//     const {
-//       studentId,
-//       conversationId,
-//       message,
-//     } = req.body;
-
-//     if (!message?.trim()) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Message is required",
-//       });
-//     }
-
-//     const student = await resolveStudent({
-//       userId,
-//       studentId,
-//     });
-
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Student not found",
-//       });
-//     }
-
-//     const access =
-//       await checkSubscriptionAccess({
-//         userId,
-//         feature: SUBSCRIPTION_FEATURES.AI_CHAT,
-//       });
-
-//     if (!access.success) {
-//       return res.status(403).json(access);
-//     }
-
-//     const classification =
-//       await classifyQuestion(message);
-
-//     const normalizedMessage =
-//       message.trim().toLowerCase();
-
-//     const greetings = [
-//       "hello",
-//       "hi",
-//       "hey",
-//       "thanks",
-//       "that is good",
-//       "that's good",
-//       "that is great",
-//       "that's great",
-//     ];
-
-//     if (
-//       classification !== "ACADEMIC" &&
-//       !greetings.includes(normalizedMessage)
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "I am an educational tutor and can only assist with academic learning.",
-//       });
-//     }
-
-//     const tutorContext =
-//       await buildTutorContext(student.id);
-
-//     const systemPrompt =
-//       buildTutorPrompt({
-//         firstName:
-//           student.firstName || "Student",
-
-//         classLevel:
-//           student.classLevel || "Unknown",
-
-//         context: tutorContext,
-//       });
-
-//     let conversation;
-//     let isNewConversation = false;
-
-//     /*
-//     ==========================================
-//     GET OR CREATE CONVERSATION
-//     ==========================================
-//     */
-
-//     if (conversationId) {
-//       const ownedConversation =
-//         await verifyConversationOwnership({
-//           userId,
-//           studentId,
-//           conversationId,
-//         });
-
-//       if (!ownedConversation) {
-//         return res.status(403).json({
-//           success: false,
-//           message: "Access denied",
-//         });
-//       }
-
-//       conversation =
-//         await getConversation(
-//           conversationId
-//         );
-
-//       if (!conversation) {
-//         return res.status(404).json({
-//           success: false,
-//           message:
-//             "Conversation not found",
-//         });
-//       }
-//     } else {
-//       const title =
-//         message.length > 50
-//           ? `${message.substring(0, 50)}...`
-//           : message;
-
-//       conversation =
-//         await createConversation({
-//           studentId: student.id,
-//           title,
-//         });
-
-//       isNewConversation = true;
-//     }
-
-//     /*
-//     ==========================================
-//     SAVE USER MESSAGE
-//     ==========================================
-//     */
-
-//     await saveMessage({
-//       conversationId: conversation.id,
-//       role: "user",
-//       content: message,
-//     });
-
-//     /*
-//     ==========================================
-//     REFRESH CONVERSATION
-//     ==========================================
-//     */
-
-//     conversation =
-//       await getConversation(
-//         conversation.id
-//       );
-
-//     const previousMessages =
-//       conversation.messages
-//         ?.slice(-20)
-//         ?.map((msg) => ({
-//           role:
-//             msg.role === "assistant"
-//               ? "model"
-//               : "user",
-
-//           parts: [
-//             {
-//               text: msg.content,
-//             },
-//           ],
-//         })) || [];
-
-//     /*
-//     ==========================================
-//     SSE HEADERS
-//     ==========================================
-//     */
-
-//     res.setHeader(
-//       "Content-Type",
-//       "text/event-stream"
-//     );
-
-//     res.setHeader(
-//       "Cache-Control",
-//       "no-cache, no-transform"
-//     );
-
-//     res.setHeader(
-//       "Connection",
-//       "keep-alive"
-//     );
-
-//     if (res.flushHeaders) {
-//       res.flushHeaders();
-//     }
-
-//     /*
-//     ==========================================
-//     NEW CONVERSATION EVENT
-//     ==========================================
-//     */
-
-//     if (isNewConversation) {
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "conversation",
-//           conversation: {
-//             id: conversation.id,
-//             title: conversation.title,
-//             createdAt:
-//               conversation.createdAt,
-//             updatedAt:
-//               conversation.updatedAt,
-//           },
-//         })}\n\n`
-//       );
-
-//       if (res.flush) {
-//         res.flush();
-//       }
-//     }
-
-//     /*
-//     ==========================================
-//     START GEMINI STREAM
-//     ==========================================
-//     */
-
-//     let fullResponse = "";
-
-//     const stream =
-//       await streamTutorResponse({
-//         systemPrompt,
-//         message,
-//         previousMessages,
-//       });
-
-//     /*
-//     ==========================================
-//     FORWARD EACH GEMINI CHUNK IMMEDIATELY
-//     ==========================================
-//     */
-
-//    for await (const chunk of stream) {
-//       const text = chunk.text;
-
-//       if (!text) {
-//         continue;
-//       }
-
-//       console.log(
-//         "[Backend] Gemini chunk:",
-//         new Date().toISOString(),
-//         JSON.stringify(text)
-//       );
-
-//       fullResponse += text;
-
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "chunk",
-//           text,
-//         })}\n\n`
-//       );
-
-//       if (res.flush) {
-//         res.flush();
-//       }
-//     }
-
-//     /*
-//     ==========================================
-//     SAVE COMPLETE ASSISTANT RESPONSE
-//     ==========================================
-//     */
-
-//     await saveMessage({
-//       conversationId: conversation.id,
-//       role: "assistant",
-//       content: fullResponse,
-//     });
-
-//     await db.tutorConversation.update({
-//       where: {
-//         id: conversation.id,
-//       },
-
-//       data: {
-//         updatedAt: new Date(),
-//       },
-//     });
-
-//     /*
-//     ==========================================
-//     STREAM COMPLETE
-//     ==========================================
-//     */
-
-//     res.write(
-//       `data: ${JSON.stringify({
-//         type: "done",
-//       })}\n\n`
-//     );
-
-//     if (res.flush) {
-//       res.flush();
-//     }
-
-//     res.end();
-
-//     /*
-//     ==========================================
-//     BACKGROUND TASKS
-//     ==========================================
-//     */
-
-//     Promise.allSettled([
-//       updateTutorMemory({
-//         studentId: student.id,
-//         conversationId:
-//           conversation.id,
-//       }),
-
-//       generateConversationSummary(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       updateTopicProgress(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       generateLearningInsights(
-//         student.id
-//       ),
-
-//       updateLearningProfile(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       checkAchievements(
-//         student.id
-//       ),
-//     ]).catch(console.error);
-
-//   } catch (error) {
-//     console.error(
-//       "AI Tutor Stream Error:",
-//       error
-//     );
-
-//     if (!res.headersSent) {
-//       return res.status(500).json({
-//         success: false,
-//         message:
-//           "Internal server error",
-//       });
-//     }
-
-//     try {
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "error",
-//           message: "Tutor failed",
-//         })}\n\n`
-//       );
-//     } catch {}
-
-//     try {
-//       res.end();
-//     } catch {}
-//   }
-// }
-
-// export async function chatWithTutorStream(req, res) {
-//   try {
-//     /*
-//     ==========================================
-//     Request
-//     ==========================================
-//     */
-
-//     const userId = req.user.userId;
-
-//     const {
-//       studentId,
-//       conversationId,
-//       message,
-//     } = req.body;
-
-//     if (!message?.trim()) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Message is required",
-//       });
-//     }
-
-//     /*
-//     ==========================================
-//     Resolve Student
-//     ==========================================
-//     */
-
-//     const student = await resolveStudent({
-//       userId,
-//       studentId,
-//     });
-
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Student not found",
-//       });
-//     }
-
-//     /*
-//     ==========================================
-//     Subscription Access
-//     ==========================================
-//     */
-
-//     const access =
-//       await checkSubscriptionAccess({
-//         userId,
-//         feature:
-//           SUBSCRIPTION_FEATURES.AI_CHAT,
-//       });
-
-//     if (!access.success) {
-//       return res
-//         .status(403)
-//         .json(access);
-//     }
-
-//     /*
-//     ==========================================
-//     Moderate Question
-//     ==========================================
-//     */
-
-//     const classification =
-//       await classifyQuestion(message);
-
-//     const normalizedMessage =
-//       message.trim().toLowerCase();
-
-//     const greetings = [
-//       "Hello",
-//       "hello",
-//       "Hi",
-//       "hi",
-//       "Hey",
-//       "hey",
-//       "thanks",
-//       "Thanks",
-//       "That is good",
-//       "That's good",
-//       "That is great",
-//       "That's great"
-//     ];
-
-//     if (
-//       classification !==
-//         "ACADEMIC" &&
-//       !greetings.includes(
-//         normalizedMessage
-//       )
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "I am an educational tutor and can only assist with academic learning.",
-//       });
-//     }
-
-//     /*
-//     ==========================================
-//     Build Tutor Context
-//     ==========================================
-//     */
-
-//     const tutorContext =
-//       await buildTutorContext(
-//         student.id
-//       );
-
-//     const systemPrompt =
-//       buildTutorPrompt({
-//         firstName:
-//           student.firstName ||
-//           "Student",
-
-//         classLevel:
-//           student.classLevel ||
-//           "Unknown",
-
-//         context: tutorContext,
-//       });
-
-//     /*
-//     ==========================================
-//     Conversation
-//     ==========================================
-//     */
-
-//     let conversation;
-
-//     let isNewConversation = false;
-
-//     if (conversationId) {
-//       const ownedConversation =
-//         await verifyConversationOwnership({
-//           userId,
-//           studentId,
-//           conversationId,
-//         });
-
-//       if (!ownedConversation) {
-//         return res.status(403).json({
-//           success: false,
-//           message: "Access denied",
-//         });
-//       }
-
-//       conversation =
-//         await getConversation(
-//           conversationId
-//         );
-
-//       if (!conversation) {
-//         return res.status(404).json({
-//           success: false,
-//           message:
-//             "Conversation not found",
-//         });
-//       }
-
-//     } else {
-
-//       const title =
-//         message.length > 50
-//           ? `${message.substring(0, 50)}...`
-//           : message;
-
-//       conversation =
-//         await createConversation({
-//           studentId: student.id,
-//           title,
-//         });
-
-//       isNewConversation = true;
-
-//       // console.log(
-//       //   "Created conversation:",
-//       //   conversation.id
-//       // );
-//     }
-
-//     /*
-//     ==========================================
-//     Save User Message
-//     ==========================================
-//     */
-
-//     await saveMessage({
-//       conversationId:
-//         conversation.id,
-
-//       role: "user",
-
-//       content: message,
-//     });
-
-//         /*
-//     ==========================================
-//     Reload Conversation
-//     ==========================================
-//     */
-
-//     conversation =
-//       await getConversation(
-//         conversation.id
-//       );
-
-//     const previousMessages =
-//       conversation.messages
-//         ?.slice(-20)
-//         ?.map((msg) => ({
-//           role:
-//             msg.role === "assistant"
-//               ? "model"
-//               : "user",
-
-//           parts: [
-//             {
-//               text: msg.content,
-//             },
-//           ],
-//         })) || [];
-
-//     /*
-//     ==========================================
-//     SSE Headers
-//     ==========================================
-//     */
-
-//     res.setHeader(
-//       "Content-Type",
-//       "text/event-stream"
-//     );
-
-//     res.setHeader(
-//       "Cache-Control",
-//       "no-cache"
-//     );
-
-//     res.setHeader(
-//       "Connection",
-//       "keep-alive"
-//     );
-
-//     if (res.flushHeaders) {
-//       res.flushHeaders();
-//     }
-
-//     /*
-//     ==========================================
-//     Notify Frontend
-//     ==========================================
-//     */
-
-//     if (isNewConversation) {
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "conversation",
-//           conversation: {
-//             id: conversation.id,
-//             title: conversation.title,
-//             createdAt: conversation.createdAt,
-//             updatedAt: conversation.updatedAt,
-//           },
-//         })}\n\n`
-//       );
-
-//         // console.log(
-//         // "New conversation event sent:",
-//         //   conversation.id
-//         // );
-//       }
-
-//     /*
-//     ==========================================
-//     Stream Gemini Response
-//     ==========================================
-//     */
-
-//     // console.log(
-//     //   "Starting Gemini stream..."
-//     // );
-
-//     let fullResponse = "";
-
-//     const stream =
-//       await streamTutorResponse({
-//         systemPrompt,
-//         message,
-//         previousMessages,
-//       });
-
-//     for await (const chunk of stream) {
-//       const text = chunk.text;
-
-//       if (!text) {
-//         continue;
-//       }
-
-//       fullResponse += text;
-
-//       // console.log(
-//       //   "Chunk:",
-//       //   text
-//       // );
-
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "chunk",
-//           text,
-//         })}\n\n`
-//       );
-//     }
-
-//       /*
-//     ==========================================
-//     Save Assistant Message
-//     ==========================================
-//     */
-
-//     await saveMessage({
-//       conversationId: conversation.id,
-//       role: "assistant",
-//       content: fullResponse,
-//     });
-
-//     // console.log(
-//     //   "Assistant message saved"
-//     // );
-
-//     /*
-//     ==========================================
-//     Update Conversation Timestamp
-//     ==========================================
-//     */
-
-//     await db.tutorConversation.update({
-//       where: {
-//         id: conversation.id,
-//       },
-
-//       data: {
-//         updatedAt: new Date(),
-//       },
-//     });
-
-//     // console.log(
-//     //   "Conversation updated"
-//     // );
-
-//     /*
-//     ==========================================
-//     Notify Frontend Stream Complete
-//     ==========================================
-//     */
-
-//     res.write(
-//       `data: ${JSON.stringify({
-//         type: "done",
-//       })}\n\n`
-//     );
-
-//     res.end();
-
-//     // console.log(
-//     //   "Stream finished"
-//     // );
-
-//     /*
-//     ==========================================
-//     Background Processing
-//     ==========================================
-//     */
-
-//     Promise.allSettled([
-//       updateTutorMemory({
-//         studentId: student.id,
-//         conversationId: conversation.id,
-//       }),
-
-//       generateConversationSummary(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       updateTopicProgress(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       generateLearningInsights(
-//         student.id
-//       ),
-
-//       updateLearningProfile(
-//         conversation.id,
-//         student.id
-//       ),
-
-//       checkAchievements(
-//         student.id
-//       ),
-//     ]).catch(console.error);
-
-//     return;
-
-//     } catch (error) {
-//     console.error(
-//       "AI Tutor Stream Error:",
-//       error
-//     );
-
-//     if (!res.headersSent) {
-//       return res.status(500).json({
-//         success: false,
-//         message:
-//           "Internal server error",
-//       });
-//     }
-
-//     try {
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "error",
-//           message:
-//             "Tutor failed",
-//         })}\n\n`
-//       );
-//     } catch {}
-
-//     try {
-//       res.end();
-//     } catch {}
-//   }
-// }
-
 
 export async function getConversations(
   req,

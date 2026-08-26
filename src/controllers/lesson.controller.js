@@ -5,8 +5,6 @@ export async function generateLessonHandler(req, res) {
   try {
     const { topicId } = req.body;
 
-    // console.log("topicId is:", topicId);
-
     const user = await db.user.findUnique({
       where: { id: req.user.userId },
       select: { role: true },
@@ -32,8 +30,6 @@ export async function generateLessonHandler(req, res) {
         hlsUrl: true,
       },
     });
-
-    // console.log(topic)
 
     if (!topic) {
       return res.status(404).json({

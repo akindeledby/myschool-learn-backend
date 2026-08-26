@@ -638,6 +638,7 @@ model TutorMessage {
   conversationId String
   role           String
   content        String
+  images         Json?
   createdAt      DateTime          @default(now())
   conversation   TutorConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

@@ -12,10 +12,12 @@ export async function createConversation({
   });
 }
 
+
 export async function saveMessage({
   conversationId,
   role,
   content,
+  images,
 }) {
   const message =
     await db.tutorMessage.create({
@@ -23,6 +25,9 @@ export async function saveMessage({
         conversationId,
         role,
         content,
+        images: images
+          ? images
+          : undefined,
       },
     });
 
@@ -37,6 +42,7 @@ export async function saveMessage({
 
   return message;
 }
+
 
 export async function getConversation(
   conversationId

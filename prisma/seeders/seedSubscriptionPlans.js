@@ -42,7 +42,7 @@ export async function seedSubscriptionPlans() {
 
       canTakeTest: true,
       canPracticeForQuiz: true,
-      canPracticeForExam: false,
+      canPracticeForExam: true,
       canChatWithLearningAssistant: false,
       canPlayCardGame: false,
       canSpeakWithTeacher: false,
@@ -199,9 +199,7 @@ export async function seedSubscriptionPlans() {
         "FREEMIUM_SCHOOL",
 
       pricePerTerm: 0,
-
       pricePerSession: 0,
-
       maxStudents: 50,
 
       videoLessonLimit: 20,

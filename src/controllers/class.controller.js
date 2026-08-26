@@ -560,20 +560,6 @@ export async function getQuestionsByTopics(req, res) {
       ])
     );
 
-    /*
-     * ============================================================
-     * FETCH QUESTIONS
-     * ============================================================
-     *
-     * IMPORTANT:
-     *
-     * correctAnswer is intentionally NOT selected.
-     *
-     * explanation is intentionally NOT selected.
-     *
-     * Therefore neither is sent to the browser before submission.
-     */
-
     const allQuestions = [];
     const topicsWithQuestions = [];
 
