@@ -5,6 +5,302 @@ import {
 } from "../services/gamification/studentProfile.service.js";
 
 
+// export async function fetchStudent(req, res) {
+//   try {
+//     // ============================================================
+//     // AUTHENTICATED USER
+//     // ============================================================
+
+//     const userId = req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Authentication required.",
+//       });
+//     }
+
+//     // ============================================================
+//     // REQUESTED STUDENT ID
+//     // ============================================================
+
+//     const { studentId } = req.query;
+
+//     // Make sure we have a clean string when one is provided.
+//     const requestedStudentId =
+//       typeof studentId === "string" &&
+//       studentId.trim()
+//         ? studentId.trim()
+//         : null;
+
+//     // ============================================================
+//     // FETCH AUTHENTICATED USER
+//     // ============================================================
+
+//     const user = await db.user.findUnique({
+//       where: {
+//         id: userId,
+//       },
+
+//       select: {
+//         id: true,
+//         role: true,
+//         email: true,
+//         profileImageUrl: true,
+//         accountId: true,
+
+//         parent: {
+//           select: {
+//             id: true,
+//           },
+//         },
+
+//         student: {
+//           select: {
+//             id: true,
+//           },
+//         },
+//       },
+//     });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found.",
+//       });
+//     }
+
+//     // ============================================================
+//     // DEBUGGING
+//     // ============================================================
+//     // You can keep this temporarily while testing the
+//     // Student -> Student switching issue.
+
+//     console.log("[fetchStudent] Profile request:", {
+//       userId,
+//       role: user.role,
+//       accountId: user.accountId,
+//       requestedStudentId,
+//       isParent: !!user.parent,
+//       isStudent: !!user.student,
+//     });
+
+//     // ============================================================
+//     // STUDENT PROFILE
+//     // ============================================================
+
+//     let student = null;
+
+//     // ============================================================
+//     // PARENT ACCESSING A CHILD PROFILE
+//     // ============================================================
+
+//     if (user.parent) {
+//       /*
+//        * A parent must provide the ID of the student profile
+//        * they want to access.
+//        */
+
+//       if (!requestedStudentId) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Student ID is required when accessing a child profile.",
+//         });
+//       }
+
+//       /*
+//        * IMPORTANT:
+//        *
+//        * We do not simply search by student ID.
+//        *
+//        * We also verify accountId so that a parent cannot
+//        * access a student belonging to another account by
+//        * manually changing the studentId.
+//        */
+
+//       if (!user.accountId) {
+//         return res.status(403).json({
+//           success: false,
+//           message:
+//             "Parent account information is missing.",
+//         });
+//       }
+
+//       student = await db.student.findFirst({
+//         where: {
+//           id: requestedStudentId,
+//           accountId: user.accountId,
+//         },
+
+//         select: {
+//           id: true,
+//           firstName: true,
+//           lastName: true,
+//           age: true,
+//           gender: true,
+//           phone: true,
+//           school: true,
+//           schoolAttended: true,
+//           classLevel: true,
+//           category: true,
+//           studentImageUrl: true,
+//           accountId: true,
+//         },
+//       });
+//     }
+
+//     // ============================================================
+//     // STUDENT ACCESSING THEIR OWN PROFILE
+//     // ============================================================
+
+//     else if (user.student) {
+//       /*
+//        * A student does not get to choose another student ID.
+//        *
+//        * The student profile is resolved through the authenticated
+//        * user's userId.
+//        */
+
+//       student = await db.student.findFirst({
+//         where: {
+//           userId,
+//         },
+
+//         select: {
+//           id: true,
+//           firstName: true,
+//           lastName: true,
+//           age: true,
+//           gender: true,
+//           phone: true,
+//           school: true,
+//           schoolAttended: true,
+//           classLevel: true,
+//           category: true,
+//           studentImageUrl: true,
+//           accountId: true,
+//         },
+//       });
+//     }
+
+//     // ============================================================
+//     // USER IS NEITHER A PARENT NOR A STUDENT
+//     // ============================================================
+
+//     else {
+//       return res.status(403).json({
+//         success: false,
+//         message:
+//           "You are not authorized to access a student profile.",
+//       });
+//     }
+
+//     // ============================================================
+//     // STUDENT NOT FOUND
+//     // ============================================================
+
+//     if (!student) {
+//       return res.status(404).json({
+//         success: false,
+//         message:
+//           "Student profile not found.",
+//       });
+//     }
+
+//     // ============================================================
+//     // ACTIVE SUBSCRIPTION
+//     // ============================================================
+
+//     let subscription = null;
+
+//     if (user.accountId) {
+//       subscription =
+//         await db.subscription.findFirst({
+//           where: {
+//             accountId: user.accountId,
+
+//             status: "ACTIVE",
+
+//             OR: [
+//               {
+//                 endsAt: null,
+//               },
+//               {
+//                 endsAt: {
+//                   gt: new Date(),
+//                 },
+//               },
+//             ],
+//           },
+
+//           include: {
+//             subscriptionPlan: true,
+//           },
+
+//           orderBy: {
+//             createdAt: "desc",
+//           },
+//         });
+//     }
+
+//     // ============================================================
+//     // RESPONSE
+//     // ============================================================
+
+//     const schoolAttended =
+//       student.school ||
+//       student.schoolAttended ||
+//       null;
+
+//     return res.status(200).json({
+//       success: true,
+
+//       student: {
+//         id: student.id,
+//         firstName: student.firstName,
+//         lastName: student.lastName,
+//         age: student.age,
+//         gender: student.gender,
+//         phone: student.phone,
+
+//         schoolAttended,
+
+//         classLevel: student.classLevel,
+//         category: student.category,
+//         studentImageUrl:
+//           student.studentImageUrl,
+//       },
+
+//       user: {
+//         id: user.id,
+//         role: user.role,
+//         email: user.email,
+//         profileImageUrl:
+//           user.profileImageUrl,
+//       },
+
+//       schoolAttended,
+
+//       subscription:
+//         subscription
+//           ?.subscriptionPlan
+//           ?.subscriptionPlanName ?? null,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "Fetch student profile error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message:
+//         "Failed to fetch student profile.",
+//     });
+//   }
+// }
+
 export async function fetchStudent(req, res) {
   try {
     const userId = req.user?.userId;
@@ -100,19 +396,6 @@ export async function fetchStudent(req, res) {
           studentImageUrl: true,
           accountId: true,
         },
-      });
-    }
-
-    /*
-     * Prevent unrelated users from accessing
-     * a student profile.
-     */
-
-    else {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You are not authorized to access a student profile.",
       });
     }
 
