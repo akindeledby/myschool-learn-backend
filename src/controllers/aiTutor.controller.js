@@ -18,6 +18,8 @@ import { generateTutorSpeech } from "../services/audio/tts.service.js";
 
 import { createTutorImage } from "../services/elevenLabs/createTutorImage.js";
 
+import { uploadTutorAudio } from "../services/elevenLabs/tutorAudioStorage.js";
+
 
 export function extractCompleteSentences(buffer) {
   if (!buffer) {
@@ -348,9 +350,135 @@ START GEMINI STREAM
 
     const ttsTasks = [];
 
+    const audioSegmentTasks = [];
+
+    const audioSegments = [];
+
     const pendingSentences = new Map();
 
     let nextSequenceToSend = 1;
+
+    // async function processSentence(
+    //   sentence,
+    //   sequence
+    // ) {
+    //   try {
+    //     const speech =
+    //       await generateTutorSpeech({
+    //         text: sentence,
+    //         voice: "default",
+    //         speed: 1,
+    //       });
+
+
+    //     pendingSentences.set(
+    //       sequence,
+    //       {
+    //         sequence,
+    //         text: sentence,
+    //         audio: speech?.audioBuffer
+    //           ? speech.audioBuffer.toString("base64")
+    //           : null,
+    //       }
+    //     );
+
+    //     /*
+    //     ========================================
+    //     Send completed sentences in order
+    //     ========================================
+    //     */
+
+    //     while (
+    //       pendingSentences.has(
+    //         nextSequenceToSend
+    //       )
+    //     ) {
+    //       const result =
+    //         pendingSentences.get(
+    //           nextSequenceToSend
+    //         );
+
+    //       pendingSentences.delete(
+    //         nextSequenceToSend
+    //       );
+
+    //       res.write(
+    //         `data: ${JSON.stringify({
+    //           type: "sentence",
+    //           sequence:
+    //             result.sequence,
+    //           text: result.text,
+    //           audio:
+    //             result.audio,
+    //           audioMimeType:
+    //             "audio/mpeg",
+    //         })}\n\n`
+    //       );
+
+    //       if (res.flush) {
+    //         res.flush();
+    //       }
+
+    //       nextSequenceToSend++;
+    //     }
+
+    //   } catch (error) {
+    //     console.error(
+    //       `[TutorStream] TTS failed for sentence ${sequence}:`,
+    //       error
+    //     );
+
+    //     /*
+    //     ========================================
+    //     Mark failed sentence as completed
+    //     so later sentences are not blocked
+    //     ========================================
+    //     */
+
+    //     pendingSentences.set(
+    //       sequence,
+    //       {
+    //         sequence,
+    //         text: sentence,
+    //         audio: null,
+    //       }
+    //     );
+
+    //     while (
+    //       pendingSentences.has(
+    //         nextSequenceToSend
+    //       )
+    //     ) {
+    //       const result =
+    //         pendingSentences.get(
+    //           nextSequenceToSend
+    //         );
+
+    //       pendingSentences.delete(
+    //         nextSequenceToSend
+    //       );
+
+    //       res.write(
+    //         `data: ${JSON.stringify({
+    //           type: "sentence",
+    //           sequence:
+    //             result.sequence,
+    //           text: result.text,
+    //           audio:
+    //             result.audio,
+    //           audioMimeType:
+    //             "audio/mpeg",
+    //         })}\n\n`
+    //       );
+
+    //       if (res.flush) {
+    //         res.flush();
+    //       }
+
+    //       nextSequenceToSend++;
+    //     }
+    //   }
+    // }
 
     async function processSentence(
       sentence,
@@ -364,21 +492,93 @@ START GEMINI STREAM
             speed: 1,
           });
 
+        /*
+        ========================================
+        STORE AUDIO FOR REPLAY
+        ========================================
+        */
+
+        if (
+          speech?.audioBuffer &&
+          speech.audioBuffer.length > 0
+        ) {
+          const uploadTask =
+            uploadTutorAudio({
+              buffer:
+                speech.audioBuffer,
+
+              mimeType:
+                "audio/mpeg",
+
+              studentId:
+                student.id,
+
+              conversationId:
+                conversation.id,
+
+              sequence,
+            })
+              .then((uploaded) => {
+                if (!uploaded?.url) {
+                  throw new Error(
+                    "Tutor audio upload did not return a URL."
+                  );
+                }
+
+                audioSegments.push({
+                  sequence,
+
+                  text: sentence,
+
+                  url:
+                    uploaded.url,
+
+                  mimeType:
+                    uploaded.mimeType ||
+                    "audio/mpeg",
+
+                  storageKey:
+                    uploaded.storageKey,
+                });
+              })
+              .catch((error) => {
+
+                console.error(
+                  `[TutorStream] Failed to store audio segment ${sequence}:`,
+                  error
+                );
+              });
+
+          audioSegmentTasks.push(
+            uploadTask
+          );
+        }
+
+        /*
+        ========================================
+        PREPARE LIVE AUDIO
+        ========================================
+        */
 
         pendingSentences.set(
           sequence,
           {
             sequence,
+
             text: sentence,
-            audio: speech?.audioBuffer
-              ? speech.audioBuffer.toString("base64")
-              : null,
+
+            audio:
+              speech?.audioBuffer
+                ? speech.audioBuffer.toString(
+                    "base64"
+                  )
+                : null,
           }
         );
 
         /*
         ========================================
-        Send completed sentences in order
+        SEND COMPLETED SENTENCES IN ORDER
         ========================================
         */
 
@@ -399,11 +599,16 @@ START GEMINI STREAM
           res.write(
             `data: ${JSON.stringify({
               type: "sentence",
+
               sequence:
                 result.sequence,
-              text: result.text,
+
+              text:
+                result.text,
+
               audio:
                 result.audio,
+
               audioMimeType:
                 "audio/mpeg",
             })}\n\n`
@@ -415,6 +620,7 @@ START GEMINI STREAM
 
           nextSequenceToSend++;
         }
+        
 
       } catch (error) {
         console.error(
@@ -422,18 +628,13 @@ START GEMINI STREAM
           error
         );
 
-        /*
-        ========================================
-        Mark failed sentence as completed
-        so later sentences are not blocked
-        ========================================
-        */
-
         pendingSentences.set(
           sequence,
           {
             sequence,
+
             text: sentence,
+
             audio: null,
           }
         );
@@ -455,11 +656,16 @@ START GEMINI STREAM
           res.write(
             `data: ${JSON.stringify({
               type: "sentence",
+
               sequence:
                 result.sequence,
-              text: result.text,
+
+              text:
+                result.text,
+
               audio:
                 result.audio,
+
               audioMimeType:
                 "audio/mpeg",
             })}\n\n`
@@ -540,6 +746,15 @@ START GEMINI STREAM
 
     await Promise.all(ttsTasks);
 
+    await Promise.allSettled(
+      audioSegmentTasks
+    );
+
+    audioSegments.sort(
+      (a, b) =>
+        a.sequence - b.sequence
+    );
+
     /*
     ==========================================
     GENERATE OPTIONAL TUTOR IMAGE
@@ -568,34 +783,33 @@ START GEMINI STREAM
         imageError
       );
 
-      /*
-      Image failure must not destroy
-      the otherwise successful tutor response.
-      */
-
       generatedImage = null;
     }
+
 
     /*
     ==========================================
     SAVE COMPLETE ASSISTANT RESPONSE
     ==========================================
     */
-
-    // await saveMessage({
-    //   conversationId: conversation.id,
-    //   role: "assistant",
-    //   content: fullResponse,
-    // });
-
+   
     await saveMessage({
       conversationId: conversation.id,
+
       role: "assistant",
+
       content: fullResponse,
+
       images: generatedImage
         ? [generatedImage]
         : undefined,
+
+      audioSegments:
+        audioSegments.length > 0
+          ? audioSegments
+          : undefined,
     });
+    
 
     if (generatedImage) {
       res.write(
@@ -723,11 +937,6 @@ export async function getConversations(
         message: "Students not found",
       });
     }
-
-    // console.log(
-    //   "student:",
-    //   student
-    // );
 
      /*
     ==========================================

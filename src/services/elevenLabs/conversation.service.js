@@ -18,16 +18,25 @@ export async function saveMessage({
   role,
   content,
   images,
+  audioSegments,
 }) {
   const message =
     await db.tutorMessage.create({
       data: {
         conversationId,
+
         role,
+
         content,
+
         images: images
           ? images
           : undefined,
+
+        audioSegments:
+          audioSegments
+            ? audioSegments
+            : undefined,
       },
     });
 
@@ -35,6 +44,7 @@ export async function saveMessage({
     where: {
       id: conversationId,
     },
+
     data: {
       updatedAt: new Date(),
     },
@@ -42,7 +52,6 @@ export async function saveMessage({
 
   return message;
 }
-
 
 export async function getConversation(
   conversationId
