@@ -1,12 +1,10 @@
 import { resolveStudent } from "../../services/elevenLabs/studentResolver.service.js";
 
 import {
-  getStudentAchievements, getAchievementsForStudent,
+  getAchievementsForStudent,
 } from "../../services/gamification/achievement.service.js";
 
-/**
- * GET /gamification/achievements
- */
+
 export async function getAchievements(
   req,
   res
@@ -18,8 +16,6 @@ export async function getAchievements(
     const {
       studentId,
     } = req.query;
-
-    // console.log("studentid", studentId)
 
     const student =
       await resolveStudent({

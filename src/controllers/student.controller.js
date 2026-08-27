@@ -658,34 +658,38 @@ export async function saveTestScore(req, res) {
      * ========================================================
      */
 
-    const invalidAnswer = answers.find((item) => {
-      if (!item) {
-        return true;
-      }
+    const invalidAnswer = answers.find(
+      (item) => {
+        if (!item) {
+          return true;
+        }
 
-      if (
-        typeof item.questionId !== "string" ||
-        !item.questionId.trim()
-      ) {
-        return true;
-      }
+        if (
+          typeof item.questionId !==
+            "string" ||
+          !item.questionId.trim()
+        ) {
+          return true;
+        }
 
-      if (
-        typeof item.topicId !== "string" ||
-        !item.topicId.trim()
-      ) {
-        return true;
-      }
+        if (
+          typeof item.topicId !==
+            "string" ||
+          !item.topicId.trim()
+        ) {
+          return true;
+        }
 
-      if (
-        item.answer !== null &&
-        typeof item.answer !== "string"
-      ) {
-        return true;
-      }
+        if (
+          item.answer !== null &&
+          typeof item.answer !== "string"
+        ) {
+          return true;
+        }
 
-      return false;
-    });
+        return false;
+      }
+    );
 
     if (invalidAnswer) {
       return res.status(400).json({
@@ -717,7 +721,8 @@ export async function saveTestScore(req, res) {
         success: false,
         message:
           "noOfQuestions does not match the number of submitted questions.",
-        submittedQuestions: noOfQuestions,
+        submittedQuestions:
+          noOfQuestions,
         actualQuestions:
           uniqueQuestionIds.length,
       });
@@ -727,42 +732,49 @@ export async function saveTestScore(req, res) {
      * ========================================================
      * 6. FETCH STUDENT, SUBJECT AND TERM
      *
-     * These are outside the transaction.
+     * These queries are deliberately outside the
+     * transaction.
      * ========================================================
      */
 
-    const [student, subject, term] =
-      await Promise.all([
-        db.student.findUnique({
-          where: {
-            id: normalizedStudentId,
-          },
-          select: {
-            id: true,
-            classId: true,
-          },
-        }),
+    const [
+      student,
+      subject,
+      term,
+    ] = await Promise.all([
+      db.student.findUnique({
+        where: {
+          id: normalizedStudentId,
+        },
 
-        db.subject.findUnique({
-          where: {
-            id: subjectId,
-          },
-          select: {
-            id: true,
-            name: true,
-          },
-        }),
+        select: {
+          id: true,
+          classId: true,
+        },
+      }),
 
-        db.term.findUnique({
-          where: {
-            id: termId,
-          },
-          select: {
-            id: true,
-            name: true,
-          },
-        }),
-      ]);
+      db.subject.findUnique({
+        where: {
+          id: subjectId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+
+      db.term.findUnique({
+        where: {
+          id: termId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+    ]);
 
     if (!student) {
       return res.status(404).json({
@@ -789,11 +801,7 @@ export async function saveTestScore(req, res) {
      * ========================================================
      * 7. FETCH QUESTIONS
      *
-     * IMPORTANT:
-     *
-     * Question does NOT have topicId.
-     *
-     * Relationship:
+     * Question does not have topicId directly.
      *
      * Question → Quiz → Topic
      * ========================================================
@@ -865,12 +873,29 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 9. VERIFY QUESTION TOPICS
+     * 9. QUESTION LOOKUP MAP
+     * ========================================================
+     */
+
+    const questionMap =
+      new Map(
+        questions.map(
+          (question) => [
+            question.id,
+            question,
+          ]
+        )
+      );
+
+    /*
+     * ========================================================
+     * 10. VERIFY QUESTIONS AND THEIR TOPICS
      * ========================================================
      */
 
     for (const question of questions) {
-      const topic = question.quiz?.topic;
+      const topic =
+        question.quiz?.topic;
 
       if (!topic) {
         return res.status(400).json({
@@ -927,7 +952,7 @@ export async function saveTestScore(req, res) {
       }
 
       /*
-       * Verify frontend topicId against
+       * Verify submitted topicId against
        * authoritative database topicId.
        */
 
@@ -954,7 +979,7 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 10. VERIFY ALL QUESTIONS ARE FROM ONE TERM
+     * 11. VERIFY ONE TERM
      * ========================================================
      */
 
@@ -968,7 +993,8 @@ export async function saveTestScore(req, res) {
     ];
 
     if (
-      questionTermIds.length !== 1
+      questionTermIds.length !== 1 ||
+      questionTermIds[0] !== termId
     ) {
       return res.status(400).json({
         success: false,
@@ -979,7 +1005,7 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 11. VERIFY ALL QUESTIONS ARE FROM THE SAME SUBJECT
+     * 12. VERIFY ONE SUBJECT
      * ========================================================
      */
 
@@ -987,7 +1013,8 @@ export async function saveTestScore(req, res) {
       ...new Set(
         questions.map(
           (question) =>
-            question.quiz.topic.subjectId
+            question.quiz.topic
+              .subjectId
         )
       ),
     ];
@@ -1002,22 +1029,6 @@ export async function saveTestScore(req, res) {
           "All questions must belong to the selected subject.",
       });
     }
-
-    /*
-     * ========================================================
-     * 12. QUESTION LOOKUP MAP
-     * ========================================================
-     */
-
-    const questionMap =
-      new Map(
-        questions.map(
-          (question) => [
-            question.id,
-            question,
-          ]
-        )
-      );
 
     /*
      * ========================================================
@@ -1042,10 +1053,19 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 14. GRADE QUESTIONS
+     * 14. GRADE TEST
      *
-     * Entirely in memory.
-     * No database transaction here.
+     * IMPORTANT:
+     *
+     * score is now the RAW TEST SCORE.
+     *
+     * Example:
+     *
+     * 15 correct out of 20
+     *
+     * score = 15
+     *
+     * NOT 75.
      * ========================================================
      */
 
@@ -1110,29 +1130,29 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 15. TEST SCORE
+     * 15. RAW TEST SCORE
+     * ========================================================
+     *
+     * The student's score is the number of
+     * correct answers.
+     *
+     * Example:
+     *
+     * 17/20 = score of 17
+     * 8/10  = score of 8
+     *
+     * No percentage conversion.
      * ========================================================
      */
 
     const totalQuestions =
       uniqueQuestionIds.length;
 
-    const score =
-      totalQuestions > 0
-        ? Number(
-            (
-              (correctCount /
-                totalQuestions) *
-              100
-            ).toFixed(2)
-          )
-        : 0;
+    const score = correctCount;
 
     /*
      * ========================================================
      * 16. BUILD TOPIC STATISTICS
-     *
-     * Entirely in memory.
      * ========================================================
      */
 
@@ -1192,16 +1212,23 @@ export async function saveTestScore(req, res) {
         );
       }
 
-      const gradedQuestion =
-        gradedResults.find(
-          (result) =>
-            result.questionId ===
-            question.id
+      const selectedAnswer =
+        normalizeAnswer(
+          submitted.answer
         );
 
-      if (
-        gradedQuestion?.isCorrect
-      ) {
+      const correctAnswer =
+        normalizeAnswer(
+          question.correctAnswer
+        );
+
+      const isCorrect =
+        selectedAnswer !== "" &&
+        correctAnswer !== "" &&
+        selectedAnswer ===
+          correctAnswer;
+
+      if (isCorrect) {
         stats.correct++;
       }
     }
@@ -1209,6 +1236,11 @@ export async function saveTestScore(req, res) {
     /*
      * ========================================================
      * 17. BUILD NORMALIZED TOPIC RESULTS
+     *
+     * Topic score remains a percentage because
+     * this is topic performance analytics.
+     *
+     * The StudentScore test fields remain raw scores.
      * ========================================================
      */
 
@@ -1275,9 +1307,10 @@ export async function saveTestScore(req, res) {
 
     /*
      * ========================================================
-     * 19. SHORT DATABASE TRANSACTION
+     * 19. DATABASE TRANSACTION
      *
-     * Only database persistence happens here.
+     * Only persistence happens inside the
+     * transaction.
      * ========================================================
      */
 
@@ -1309,83 +1342,128 @@ export async function saveTestScore(req, res) {
 
           /*
            * ==================================================
-           * PREVIOUS TEST VALUES
+           * PREVIOUS TEST STATISTICS
            * ==================================================
            */
 
-          const previousCorrect =
+          const previousTestTotalCorrect =
             existingScore
               ?.testTotalCorrect ?? 0;
 
-          const previousQuestions =
+          const previousTestTotalQuestions =
             existingScore
               ?.testTotalQuestions ?? 0;
+
+          const previousTestTotalScore =
+            existingScore
+              ?.testTotalScore ?? 0;
 
           const previousTestCount =
             existingScore
               ?.testCount ?? 0;
 
+          const previousTestLowestScore =
+            existingScore
+              ?.testLowestScore ?? null;
+
+          const previousTestHighestScore =
+            existingScore
+              ?.testHighestScore ?? null;
+
           /*
            * ==================================================
-           * NEW CUMULATIVE VALUES
+           * NEW TEST STATISTICS
            * ==================================================
            */
 
           const newTestCount =
             previousTestCount + 1;
 
-          const newTotalCorrect =
-            previousCorrect +
+          const newTestTotalCorrect =
+            previousTestTotalCorrect +
             correctCount;
 
-          const newTotalQuestions =
-            previousQuestions +
+          const newTestTotalQuestions =
+            previousTestTotalQuestions +
             totalQuestions;
 
-          const newAverageScore =
-            newTotalQuestions > 0
+          /*
+           * ==================================================
+           * CUMULATIVE RAW TEST SCORE
+           *
+           * Example:
+           *
+           * Previous = 30
+           * Current  = 15
+           *
+           * New total = 45
+           * ==================================================
+           */
+
+          const newTestTotalScore =
+            previousTestTotalScore +
+            score;
+
+          /*
+           * ==================================================
+           * RAW AVERAGE TEST SCORE
+           *
+           * IMPORTANT:
+           *
+           * This is NOT a percentage.
+           *
+           * It is:
+           *
+           * total raw score / number of tests
+           *
+           * Example:
+           *
+           * 15 + 18 + 12 = 45
+           * 45 / 3 = 15
+           * ==================================================
+           */
+
+          const newTestAverageScore =
+            newTestCount > 0
               ? Number(
                   (
-                    (newTotalCorrect /
-                      newTotalQuestions) *
-                    100
+                    newTestTotalScore /
+                    newTestCount
                   ).toFixed(2)
                 )
               : 0;
 
           /*
            * ==================================================
-           * LOWEST / HIGHEST TEST SCORE
+           * LOWEST RAW TEST SCORE
            * ==================================================
            */
 
-          const previousLowest =
-            existingScore
-              ?.testLowestScore;
-
-          const previousHighest =
-            existingScore
-              ?.testHighestScore;
-
-          const newLowest =
-            previousLowest ===
+          const newTestLowestScore =
+            previousTestLowestScore ===
               null ||
-            previousLowest ===
+            previousTestLowestScore ===
               undefined
               ? score
               : Math.min(
-                  previousLowest,
+                  previousTestLowestScore,
                   score
                 );
 
-          const newHighest =
-            previousHighest ===
+          /*
+           * ==================================================
+           * HIGHEST RAW TEST SCORE
+           * ==================================================
+           */
+
+          const newTestHighestScore =
+            previousTestHighestScore ===
               null ||
-            previousHighest ===
+            previousTestHighestScore ===
               undefined
               ? score
               : Math.max(
-                  previousHighest,
+                  previousTestHighestScore,
                   score
                 );
 
@@ -1418,13 +1496,21 @@ export async function saveTestScore(req, res) {
 
                   termId,
 
+                  /*
+                   * RAW TEST STATISTICS
+                   */
+
                   testTotalCorrect:
                     correctCount,
 
                   testTotalQuestions:
                     totalQuestions,
 
-                  testCount: 1,
+                  testTotalScore:
+                    score,
+
+                  testAverageScore:
+                    score,
 
                   testLowestScore:
                     score,
@@ -1432,8 +1518,11 @@ export async function saveTestScore(req, res) {
                   testHighestScore:
                     score,
 
-                  testAverageScore:
-                    score,
+                  testCount: 1,
+
+                  /*
+                   * TOPIC INFORMATION
+                   */
 
                   testTopics:
                     normalizedTopicResults,
@@ -1443,23 +1532,46 @@ export async function saveTestScore(req, res) {
                 },
 
                 update: {
+                  /*
+                   * CUMULATIVE RAW VALUES
+                   */
+
                   testTotalCorrect:
-                    newTotalCorrect,
+                    newTestTotalCorrect,
 
                   testTotalQuestions:
-                    newTotalQuestions,
+                    newTestTotalQuestions,
+
+                  testTotalScore:
+                    newTestTotalScore,
+
+                  /*
+                   * RAW AVERAGE
+                   */
+
+                  testAverageScore:
+                    newTestAverageScore,
+
+                  /*
+                   * RAW LOWEST/HIGHEST
+                   */
+
+                  testLowestScore:
+                    newTestLowestScore,
+
+                  testHighestScore:
+                    newTestHighestScore,
+
+                  /*
+                   * NUMBER OF TESTS
+                   */
 
                   testCount:
                     newTestCount,
 
-                  testLowestScore:
-                    newLowest,
-
-                  testHighestScore:
-                    newHighest,
-
-                  testAverageScore:
-                    newAverageScore,
+                  /*
+                   * LATEST TOPIC RESULTS
+                   */
 
                   testTopics:
                     normalizedTopicResults,
@@ -1472,9 +1584,7 @@ export async function saveTestScore(req, res) {
 
           /*
            * ==================================================
-           * FETCH ALL EXISTING TOPIC ANALYTICS AT ONCE
-           *
-           * Previously this was one query per topic.
+           * FETCH EXISTING TOPIC ANALYTICS
            * ==================================================
            */
 
@@ -1494,7 +1604,7 @@ export async function saveTestScore(req, res) {
 
           /*
            * ==================================================
-           * CREATE LOOKUP MAP
+           * TOPIC ANALYTICS LOOKUP
            * ==================================================
            */
 
@@ -1510,10 +1620,7 @@ export async function saveTestScore(req, res) {
 
           /*
            * ==================================================
-           * BUILD ANALYTICS OPERATIONS
-           *
-           * Everything is calculated before
-           * the writes happen.
+           * BUILD TOPIC ANALYTICS OPERATIONS
            * ==================================================
            */
 
@@ -1538,8 +1645,8 @@ export async function saveTestScore(req, res) {
                     ?.testCount ?? 0;
 
                 /*
-                 * Reconstruct answered questions
-                 * from previous completion rate.
+                 * Reconstruct previous answered
+                 * questions from completion rate.
                  */
 
                 const previousAnswered =
@@ -1588,6 +1695,10 @@ export async function saveTestScore(req, res) {
                         ).toFixed(2)
                       )
                     : 0;
+
+                /*
+                 * Topic score is still a percentage.
+                 */
 
                 const currentTopicScore =
                   topic.questions > 0
@@ -1663,9 +1774,6 @@ export async function saveTestScore(req, res) {
           /*
            * ==================================================
            * TOPIC ANALYTICS WRITES
-           *
-           * These are still inside the transaction,
-           * but there are no preceding findUnique calls.
            * ==================================================
            */
 
@@ -1678,8 +1786,6 @@ export async function saveTestScore(req, res) {
           ) {
             const {
               topic,
-              existing,
-
               completionRate,
               averageScore,
               currentTopicScore,
@@ -1779,26 +1885,56 @@ export async function saveTestScore(req, res) {
             );
           }
 
+          /*
+           * ==================================================
+           * RETURN TRANSACTION RESULT
+           * ==================================================
+           */
+
           return {
             studentScore,
 
             topicAnalytics:
               topicAnalyticsResults,
+
+            testStatistics: {
+              testTotalCorrect:
+                newTestTotalCorrect,
+
+              testTotalQuestions:
+                newTestTotalQuestions,
+
+              testTotalScore:
+                newTestTotalScore,
+
+              testAverageScore:
+                newTestAverageScore,
+
+              testLowestScore:
+                newTestLowestScore,
+
+              testHighestScore:
+                newTestHighestScore,
+
+              testCount:
+                newTestCount,
+            },
           };
         },
 
         {
           /*
-           * Give the transaction a reasonable
-           * safety margin after optimization.
+           * Maximum time Prisma waits to
+           * obtain a transaction connection.
            */
-          timeout: 10000,
+
+          maxWait: 5000,
 
           /*
-           * Maximum time Prisma waits to obtain
-           * a transaction connection.
+           * Maximum transaction execution time.
            */
-          maxWait: 5000,
+
+          timeout: 10000,
         }
       );
 
@@ -1821,7 +1957,18 @@ export async function saveTestScore(req, res) {
         topicAnalytics:
           result.topicAnalytics,
 
+        /*
+         * RAW TEST STATISTICS
+         */
+
+        testStatistics:
+          result.testStatistics,
+
         test: {
+          /*
+           * CURRENT TEST RAW SCORE
+           */
+
           score,
 
           correct:
@@ -1829,8 +1976,13 @@ export async function saveTestScore(req, res) {
 
           totalQuestions,
 
-          percentage:
-            score,
+          /*
+           * Keep percentage out of the
+           * StudentScore test statistics.
+           *
+           * The topic analytics still contain
+           * their own percentage values.
+           */
 
           termId,
 
@@ -1863,6 +2015,1311 @@ export async function saveTestScore(req, res) {
     });
   }
 }
+
+// export async function saveTestScore(req, res) {
+//   try {
+//     /*
+//      * ========================================================
+//      * 1. AUTHENTICATION AND STUDENT
+//      * ========================================================
+//      */
+
+//     const userId = req.user?.userId;
+
+//     const { studentId } = req.query;
+
+//     const normalizedStudentId =
+//       typeof studentId === "string"
+//         ? studentId.trim()
+//         : "";
+
+//     if (
+//       !normalizedStudentId ||
+//       normalizedStudentId === "null" ||
+//       normalizedStudentId === "undefined"
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Student ID is required.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 2. REQUEST BODY
+//      * ========================================================
+//      */
+
+//     const {
+//       subjectId,
+//       termId,
+//       noOfQuestions,
+//       answers,
+//     } = req.body;
+
+//     /*
+//      * ========================================================
+//      * 3. BASIC VALIDATION
+//      * ========================================================
+//      */
+
+//     if (
+//       !subjectId ||
+//       typeof subjectId !== "string"
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "subjectId is required.",
+//       });
+//     }
+
+//     if (
+//       !termId ||
+//       typeof termId !== "string"
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "termId is required.",
+//       });
+//     }
+
+//     if (
+//       typeof noOfQuestions !== "number" ||
+//       !Number.isInteger(noOfQuestions) ||
+//       noOfQuestions <= 0
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "noOfQuestions must be a positive integer.",
+//       });
+//     }
+
+//     if (!Array.isArray(answers)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Answers must be an array.",
+//       });
+//     }
+
+//     if (answers.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No answers were submitted.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 4. VALIDATE ANSWER OBJECTS
+//      * ========================================================
+//      */
+
+//     const invalidAnswer = answers.find((item) => {
+//       if (!item) {
+//         return true;
+//       }
+
+//       if (
+//         typeof item.questionId !== "string" ||
+//         !item.questionId.trim()
+//       ) {
+//         return true;
+//       }
+
+//       if (
+//         typeof item.topicId !== "string" ||
+//         !item.topicId.trim()
+//       ) {
+//         return true;
+//       }
+
+//       if (
+//         item.answer !== null &&
+//         typeof item.answer !== "string"
+//       ) {
+//         return true;
+//       }
+
+//       return false;
+//     });
+
+//     if (invalidAnswer) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "One or more submitted answers are invalid.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 5. NORMALIZE QUESTION IDS
+//      * ========================================================
+//      */
+
+//     const uniqueQuestionIds = [
+//       ...new Set(
+//         answers.map((item) =>
+//           item.questionId.trim()
+//         )
+//       ),
+//     ];
+
+//     if (
+//       noOfQuestions !==
+//       uniqueQuestionIds.length
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "noOfQuestions does not match the number of submitted questions.",
+//         submittedQuestions: noOfQuestions,
+//         actualQuestions:
+//           uniqueQuestionIds.length,
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 6. FETCH STUDENT, SUBJECT AND TERM
+//      *
+//      * These are outside the transaction.
+//      * ========================================================
+//      */
+
+//     const [student, subject, term] =
+//       await Promise.all([
+//         db.student.findUnique({
+//           where: {
+//             id: normalizedStudentId,
+//           },
+//           select: {
+//             id: true,
+//             classId: true,
+//           },
+//         }),
+
+//         db.subject.findUnique({
+//           where: {
+//             id: subjectId,
+//           },
+//           select: {
+//             id: true,
+//             name: true,
+//           },
+//         }),
+
+//         db.term.findUnique({
+//           where: {
+//             id: termId,
+//           },
+//           select: {
+//             id: true,
+//             name: true,
+//           },
+//         }),
+//       ]);
+
+//     if (!student) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Student not found.",
+//       });
+//     }
+
+//     if (!subject) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Subject not found.",
+//       });
+//     }
+
+//     if (!term) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Term not found.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 7. FETCH QUESTIONS
+//      *
+//      * IMPORTANT:
+//      *
+//      * Question does NOT have topicId.
+//      *
+//      * Relationship:
+//      *
+//      * Question → Quiz → Topic
+//      * ========================================================
+//      */
+
+//     const questions =
+//       await db.question.findMany({
+//         where: {
+//           id: {
+//             in: uniqueQuestionIds,
+//           },
+//         },
+
+//         select: {
+//           id: true,
+//           text: true,
+//           options: true,
+//           correctAnswer: true,
+//           explanation: true,
+//           quizId: true,
+
+//           quiz: {
+//             select: {
+//               id: true,
+//               topicId: true,
+
+//               topic: {
+//                 select: {
+//                   id: true,
+//                   title: true,
+//                   subjectId: true,
+//                   termId: true,
+//                   classId: true,
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       });
+
+//     /*
+//      * ========================================================
+//      * 8. VERIFY ALL QUESTIONS EXIST
+//      * ========================================================
+//      */
+
+//     if (
+//       questions.length !==
+//       uniqueQuestionIds.length
+//     ) {
+//       const foundIds = new Set(
+//         questions.map(
+//           (question) => question.id
+//         )
+//       );
+
+//       const missingQuestionIds =
+//         uniqueQuestionIds.filter(
+//           (id) => !foundIds.has(id)
+//         );
+
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "One or more submitted questions could not be found.",
+//         missingQuestionIds,
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 9. VERIFY QUESTION TOPICS
+//      * ========================================================
+//      */
+
+//     for (const question of questions) {
+//       const topic = question.quiz?.topic;
+
+//       if (!topic) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "One or more questions are not associated with a valid topic.",
+//           questionId: question.id,
+//         });
+//       }
+
+//       /*
+//        * Subject verification
+//        */
+
+//       if (
+//         topic.subjectId !== subjectId
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "One or more questions do not belong to the selected subject.",
+//           questionId: question.id,
+//         });
+//       }
+
+//       /*
+//        * Class verification
+//        */
+
+//       if (
+//         topic.classId !== student.classId
+//       ) {
+//         return res.status(403).json({
+//           success: false,
+//           message:
+//             "One or more questions do not belong to the student's class.",
+//           questionId: question.id,
+//         });
+//       }
+
+//       /*
+//        * Term verification
+//        */
+
+//       if (
+//         topic.termId !== termId
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "One or more questions do not belong to the selected term.",
+//           questionId: question.id,
+//         });
+//       }
+
+//       /*
+//        * Verify frontend topicId against
+//        * authoritative database topicId.
+//        */
+
+//       const submittedAnswer =
+//         answers.find(
+//           (item) =>
+//             item.questionId ===
+//             question.id
+//         );
+
+//       if (
+//         !submittedAnswer ||
+//         submittedAnswer.topicId !==
+//           topic.id
+//       ) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "One or more submitted topic IDs do not match the questions.",
+//           questionId: question.id,
+//         });
+//       }
+//     }
+
+//     /*
+//      * ========================================================
+//      * 10. VERIFY ALL QUESTIONS ARE FROM ONE TERM
+//      * ========================================================
+//      */
+
+//     const questionTermIds = [
+//       ...new Set(
+//         questions.map(
+//           (question) =>
+//             question.quiz.topic.termId
+//         )
+//       ),
+//     ];
+
+//     if (
+//       questionTermIds.length !== 1
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "All questions in one test must belong to the same term.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 11. VERIFY ALL QUESTIONS ARE FROM THE SAME SUBJECT
+//      * ========================================================
+//      */
+
+//     const questionSubjectIds = [
+//       ...new Set(
+//         questions.map(
+//           (question) =>
+//             question.quiz.topic.subjectId
+//         )
+//       ),
+//     ];
+
+//     if (
+//       questionSubjectIds.length !== 1 ||
+//       questionSubjectIds[0] !== subjectId
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "All questions must belong to the selected subject.",
+//       });
+//     }
+
+//     /*
+//      * ========================================================
+//      * 12. QUESTION LOOKUP MAP
+//      * ========================================================
+//      */
+
+//     const questionMap =
+//       new Map(
+//         questions.map(
+//           (question) => [
+//             question.id,
+//             question,
+//           ]
+//         )
+//       );
+
+//     /*
+//      * ========================================================
+//      * 13. NORMALIZE ANSWERS
+//      * ========================================================
+//      */
+
+//     const normalizeAnswer = (
+//       value
+//     ) => {
+//       if (
+//         typeof value !== "string"
+//       ) {
+//         return "";
+//       }
+
+//       return value
+//         .trim()
+//         .replace(/\s+/g, " ")
+//         .toLowerCase();
+//     };
+
+//     /*
+//      * ========================================================
+//      * 14. GRADE QUESTIONS
+//      *
+//      * Entirely in memory.
+//      * No database transaction here.
+//      * ========================================================
+//      */
+
+//     let correctCount = 0;
+
+//     const gradedResults =
+//       answers.map((submitted) => {
+//         const question =
+//           questionMap.get(
+//             submitted.questionId
+//           );
+
+//         if (!question) {
+//           return {
+//             questionId:
+//               submitted.questionId,
+
+//             selectedAnswer:
+//               submitted.answer,
+
+//             isCorrect: false,
+//           };
+//         }
+
+//         const selectedAnswer =
+//           normalizeAnswer(
+//             submitted.answer
+//           );
+
+//         const correctAnswer =
+//           normalizeAnswer(
+//             question.correctAnswer
+//           );
+
+//         const isCorrect =
+//           selectedAnswer !== "" &&
+//           correctAnswer !== "" &&
+//           selectedAnswer ===
+//             correctAnswer;
+
+//         if (isCorrect) {
+//           correctCount++;
+//         }
+
+//         return {
+//           questionId:
+//             question.id,
+
+//           selectedAnswer:
+//             submitted.answer,
+
+//           isCorrect,
+
+//           correctAnswer:
+//             question.correctAnswer,
+
+//           explanation:
+//             question.explanation ||
+//             undefined,
+//         };
+//       });
+
+//     /*
+//      * ========================================================
+//      * 15. TEST SCORE
+//      * ========================================================
+//      */
+
+//     const totalQuestions =
+//       uniqueQuestionIds.length;
+
+//     const score =
+//       totalQuestions > 0
+//         ? Number(
+//             (
+//               (correctCount /
+//                 totalQuestions) *
+//               100
+//             ).toFixed(2)
+//           )
+//         : 0;
+
+//     /*
+//      * ========================================================
+//      * 16. BUILD TOPIC STATISTICS
+//      *
+//      * Entirely in memory.
+//      * ========================================================
+//      */
+
+//     const topicStats =
+//       new Map();
+
+//     for (const submitted of answers) {
+//       const question =
+//         questionMap.get(
+//           submitted.questionId
+//         );
+
+//       if (!question) {
+//         continue;
+//       }
+
+//       const topic =
+//         question.quiz.topic;
+
+//       const topicId =
+//         topic.id;
+
+//       if (
+//         !topicStats.has(topicId)
+//       ) {
+//         topicStats.set(
+//           topicId,
+//           {
+//             id: topicId,
+//             title: topic.title,
+
+//             questions: 0,
+//             answered: 0,
+//             correct: 0,
+
+//             attemptedQuestionIds: [],
+//           }
+//         );
+//       }
+
+//       const stats =
+//         topicStats.get(topicId);
+
+//       stats.questions++;
+
+//       const hasAnswer =
+//         typeof submitted.answer ===
+//           "string" &&
+//         submitted.answer.trim()
+//           .length > 0;
+
+//       if (hasAnswer) {
+//         stats.answered++;
+
+//         stats.attemptedQuestionIds.push(
+//           question.id
+//         );
+//       }
+
+//       const gradedQuestion =
+//         gradedResults.find(
+//           (result) =>
+//             result.questionId ===
+//             question.id
+//         );
+
+//       if (
+//         gradedQuestion?.isCorrect
+//       ) {
+//         stats.correct++;
+//       }
+//     }
+
+//     /*
+//      * ========================================================
+//      * 17. BUILD NORMALIZED TOPIC RESULTS
+//      * ========================================================
+//      */
+
+//     const normalizedTopicResults =
+//       Array.from(
+//         topicStats.values()
+//       ).map((topic) => {
+//         const topicScore =
+//           topic.questions > 0
+//             ? Number(
+//                 (
+//                   (topic.correct /
+//                     topic.questions) *
+//                   100
+//                 ).toFixed(2)
+//               )
+//             : 0;
+
+//         const completionRate =
+//           topic.questions > 0
+//             ? Number(
+//                 (
+//                   (topic.answered /
+//                     topic.questions) *
+//                   100
+//                 ).toFixed(2)
+//               )
+//             : 0;
+
+//         return {
+//           id: topic.id,
+
+//           title: topic.title,
+
+//           questions:
+//             topic.questions,
+
+//           answered:
+//             topic.answered,
+
+//           correct:
+//             topic.correct,
+
+//           score:
+//             topicScore,
+
+//           completionRate,
+
+//           attemptedQuestionIds:
+//             topic.attemptedQuestionIds,
+//         };
+//       });
+
+//     /*
+//      * ========================================================
+//      * 18. TOPIC IDS
+//      * ========================================================
+//      */
+
+//     const topicIds =
+//       normalizedTopicResults.map(
+//         (topic) => topic.id
+//       );
+
+//     /*
+//      * ========================================================
+//      * 19. SHORT DATABASE TRANSACTION
+//      *
+//      * Only database persistence happens here.
+//      * ========================================================
+//      */
+
+//     const result =
+//       await db.$transaction(
+//         async (tx) => {
+//           /*
+//            * ==================================================
+//            * GET EXISTING STUDENT SCORE
+//            * ==================================================
+//            */
+
+//           const existingScore =
+//             await tx.studentScore.findUnique(
+//               {
+//                 where: {
+//                   studentId_subjectId_termId:
+//                     {
+//                       studentId:
+//                         normalizedStudentId,
+
+//                       subjectId,
+
+//                       termId,
+//                     },
+//                 },
+//               }
+//             );
+
+//           /*
+//            * ==================================================
+//            * PREVIOUS TEST VALUES
+//            * ==================================================
+//            */
+
+//           const previousCorrect =
+//             existingScore
+//               ?.testTotalCorrect ?? 0;
+
+//           const previousQuestions =
+//             existingScore
+//               ?.testTotalQuestions ?? 0;
+
+//           const previousTestCount =
+//             existingScore
+//               ?.testCount ?? 0;
+
+//           /*
+//            * ==================================================
+//            * NEW CUMULATIVE VALUES
+//            * ==================================================
+//            */
+
+//           const newTestCount =
+//             previousTestCount + 1;
+
+//           const newTotalCorrect =
+//             previousCorrect +
+//             correctCount;
+
+//           const newTotalQuestions =
+//             previousQuestions +
+//             totalQuestions;
+
+//           const newAverageScore =
+//             newTotalQuestions > 0
+//               ? Number(
+//                   (
+//                     (newTotalCorrect /
+//                       newTotalQuestions) *
+//                     100
+//                   ).toFixed(2)
+//                 )
+//               : 0;
+
+//           /*
+//            * ==================================================
+//            * LOWEST / HIGHEST TEST SCORE
+//            * ==================================================
+//            */
+
+//           const previousLowest =
+//             existingScore
+//               ?.testLowestScore;
+
+//           const previousHighest =
+//             existingScore
+//               ?.testHighestScore;
+
+//           const newLowest =
+//             previousLowest ===
+//               null ||
+//             previousLowest ===
+//               undefined
+//               ? score
+//               : Math.min(
+//                   previousLowest,
+//                   score
+//                 );
+
+//           const newHighest =
+//             previousHighest ===
+//               null ||
+//             previousHighest ===
+//               undefined
+//               ? score
+//               : Math.max(
+//                   previousHighest,
+//                   score
+//                 );
+
+//           /*
+//            * ==================================================
+//            * STUDENT SCORE UPSERT
+//            * ==================================================
+//            */
+
+//           const studentScore =
+//             await tx.studentScore.upsert(
+//               {
+//                 where: {
+//                   studentId_subjectId_termId:
+//                     {
+//                       studentId:
+//                         normalizedStudentId,
+
+//                       subjectId,
+
+//                       termId,
+//                     },
+//                 },
+
+//                 create: {
+//                   studentId:
+//                     normalizedStudentId,
+
+//                   subjectId,
+
+//                   termId,
+
+//                   testTotalCorrect:
+//                     correctCount,
+
+//                   testTotalQuestions:
+//                     totalQuestions,
+
+//                   testCount: 1,
+
+//                   testLowestScore:
+//                     score,
+
+//                   testHighestScore:
+//                     score,
+
+//                   testAverageScore:
+//                     score,
+
+//                   testTopics:
+//                     normalizedTopicResults,
+
+//                   noOfTopics:
+//                     normalizedTopicResults.length,
+//                 },
+
+//                 update: {
+//                   testTotalCorrect:
+//                     newTotalCorrect,
+
+//                   testTotalQuestions:
+//                     newTotalQuestions,
+
+//                   testCount:
+//                     newTestCount,
+
+//                   testLowestScore:
+//                     newLowest,
+
+//                   testHighestScore:
+//                     newHighest,
+
+//                   testAverageScore:
+//                     newAverageScore,
+
+//                   testTopics:
+//                     normalizedTopicResults,
+
+//                   noOfTopics:
+//                     normalizedTopicResults.length,
+//                 },
+//               }
+//             );
+
+//           /*
+//            * ==================================================
+//            * FETCH ALL EXISTING TOPIC ANALYTICS AT ONCE
+//            *
+//            * Previously this was one query per topic.
+//            * ==================================================
+//            */
+
+//           const existingAnalytics =
+//             await tx.topicAnalytics.findMany(
+//               {
+//                 where: {
+//                   studentId:
+//                     normalizedStudentId,
+
+//                   topicId: {
+//                     in: topicIds,
+//                   },
+//                 },
+//               }
+//             );
+
+//           /*
+//            * ==================================================
+//            * CREATE LOOKUP MAP
+//            * ==================================================
+//            */
+
+//           const analyticsMap =
+//             new Map(
+//               existingAnalytics.map(
+//                 (analytics) => [
+//                   analytics.topicId,
+//                   analytics,
+//                 ]
+//               )
+//             );
+
+//           /*
+//            * ==================================================
+//            * BUILD ANALYTICS OPERATIONS
+//            *
+//            * Everything is calculated before
+//            * the writes happen.
+//            * ==================================================
+//            */
+
+//           const analyticsOperations =
+//             normalizedTopicResults.map(
+//               (topic) => {
+//                 const existing =
+//                   analyticsMap.get(
+//                     topic.id
+//                   );
+
+//                 const previousQuestions =
+//                   existing
+//                     ?.totalQuestions ?? 0;
+
+//                 const previousCorrect =
+//                   existing
+//                     ?.totalCorrect ?? 0;
+
+//                 const previousTests =
+//                   existing
+//                     ?.testCount ?? 0;
+
+//                 /*
+//                  * Reconstruct answered questions
+//                  * from previous completion rate.
+//                  */
+
+//                 const previousAnswered =
+//                   existing &&
+//                   previousQuestions > 0
+//                     ? (
+//                         existing.completionRate /
+//                         100
+//                       ) *
+//                       previousQuestions
+//                     : 0;
+
+//                 const newQuestions =
+//                   previousQuestions +
+//                   topic.questions;
+
+//                 const newCorrect =
+//                   previousCorrect +
+//                   topic.correct;
+
+//                 const newAnswered =
+//                   previousAnswered +
+//                   topic.answered;
+
+//                 const newTestCount =
+//                   previousTests + 1;
+
+//                 const completionRate =
+//                   newQuestions > 0
+//                     ? Number(
+//                         (
+//                           (newAnswered /
+//                             newQuestions) *
+//                           100
+//                         ).toFixed(2)
+//                       )
+//                     : 0;
+
+//                 const averageScore =
+//                   newQuestions > 0
+//                     ? Number(
+//                         (
+//                           (newCorrect /
+//                             newQuestions) *
+//                           100
+//                         ).toFixed(2)
+//                       )
+//                     : 0;
+
+//                 const currentTopicScore =
+//                   topic.questions > 0
+//                     ? Number(
+//                         (
+//                           (topic.correct /
+//                             topic.questions) *
+//                           100
+//                         ).toFixed(2)
+//                       )
+//                     : 0;
+
+//                 const lowestScore =
+//                   existing?.lowestScore !==
+//                     null &&
+//                   existing?.lowestScore !==
+//                     undefined
+//                     ? Math.min(
+//                         existing.lowestScore,
+//                         currentTopicScore
+//                       )
+//                     : currentTopicScore;
+
+//                 const highestScore =
+//                   existing?.highestScore !==
+//                     null &&
+//                   existing?.highestScore !==
+//                     undefined
+//                     ? Math.max(
+//                         existing.highestScore,
+//                         currentTopicScore
+//                       )
+//                     : currentTopicScore;
+
+//                 const attemptedQuestionIds =
+//                   Array.from(
+//                     new Set([
+//                       ...(existing
+//                         ?.attemptedQuestionIds ??
+//                         []),
+
+//                       ...(topic
+//                         .attemptedQuestionIds ??
+//                         []),
+//                     ])
+//                   );
+
+//                 return {
+//                   topic,
+//                   existing,
+
+//                   completionRate,
+
+//                   averageScore,
+
+//                   currentTopicScore,
+
+//                   newQuestions,
+
+//                   newCorrect,
+
+//                   newTestCount,
+
+//                   attemptedQuestionIds,
+
+//                   lowestScore,
+
+//                   highestScore,
+//                 };
+//               }
+//             );
+
+//           /*
+//            * ==================================================
+//            * TOPIC ANALYTICS WRITES
+//            *
+//            * These are still inside the transaction,
+//            * but there are no preceding findUnique calls.
+//            * ==================================================
+//            */
+
+//           const topicAnalyticsResults =
+//             [];
+
+//           for (
+//             const item of
+//               analyticsOperations
+//           ) {
+//             const {
+//               topic,
+//               existing,
+
+//               completionRate,
+//               averageScore,
+//               currentTopicScore,
+
+//               newQuestions,
+//               newCorrect,
+//               newTestCount,
+
+//               attemptedQuestionIds,
+
+//               lowestScore,
+//               highestScore,
+//             } = item;
+
+//             const analytics =
+//               await tx.topicAnalytics.upsert(
+//                 {
+//                   where: {
+//                     studentId_topicId:
+//                       {
+//                         studentId:
+//                           normalizedStudentId,
+
+//                         topicId:
+//                           topic.id,
+//                       },
+//                   },
+
+//                   create: {
+//                     studentId:
+//                       normalizedStudentId,
+
+//                     topicId:
+//                       topic.id,
+
+//                     completionRate:
+//                       topic.completionRate,
+
+//                     averageScore:
+//                       currentTopicScore,
+
+//                     testCount: 1,
+
+//                     totalQuestions:
+//                       topic.questions,
+
+//                     totalCorrect:
+//                       topic.correct,
+
+//                     attemptedQuestionIds:
+//                       topic.attemptedQuestionIds,
+
+//                     lastScore:
+//                       currentTopicScore,
+
+//                     highestScore:
+//                       currentTopicScore,
+
+//                     lowestScore:
+//                       currentTopicScore,
+
+//                     lastAccessed:
+//                       new Date(),
+//                   },
+
+//                   update: {
+//                     completionRate,
+
+//                     averageScore,
+
+//                     testCount:
+//                       newTestCount,
+
+//                     totalQuestions:
+//                       newQuestions,
+
+//                     totalCorrect:
+//                       newCorrect,
+
+//                     attemptedQuestionIds,
+
+//                     lastScore:
+//                       currentTopicScore,
+
+//                     highestScore,
+
+//                     lowestScore,
+
+//                     lastAccessed:
+//                       new Date(),
+//                   },
+//                 }
+//               );
+
+//             topicAnalyticsResults.push(
+//               analytics
+//             );
+//           }
+
+//           return {
+//             studentScore,
+
+//             topicAnalytics:
+//               topicAnalyticsResults,
+//           };
+//         },
+
+//         {
+//           /*
+//            * Give the transaction a reasonable
+//            * safety margin after optimization.
+//            */
+//           timeout: 10000,
+
+//           /*
+//            * Maximum time Prisma waits to obtain
+//            * a transaction connection.
+//            */
+//           maxWait: 5000,
+//         }
+//       );
+
+//     /*
+//      * ========================================================
+//      * 20. RESPONSE
+//      * ========================================================
+//      */
+
+//     return res.status(200).json({
+//       success: true,
+
+//       message:
+//         "Test graded and saved successfully.",
+
+//       data: {
+//         studentScore:
+//           result.studentScore,
+
+//         topicAnalytics:
+//           result.topicAnalytics,
+
+//         test: {
+//           score,
+
+//           correct:
+//             correctCount,
+
+//           totalQuestions,
+
+//           percentage:
+//             score,
+
+//           termId,
+
+//           subjectId,
+
+//           noOfTopics:
+//             normalizedTopicResults.length,
+
+//           studentId:
+//             normalizedStudentId,
+
+//           results:
+//             gradedResults,
+
+//           topicResults:
+//             normalizedTopicResults,
+//         },
+//       },
+//     });
+//   } catch (error) {
+//     console.error(
+//       "[saveTestScore] Error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message:
+//         "Failed to grade and save test.",
+//     });
+//   }
+// }
 
 
 

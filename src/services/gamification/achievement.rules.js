@@ -8,10 +8,7 @@ import {
   ACHIEVEMENT_CODES,
 } from "./constants.js";
 
-/**
- * Checks achievements earned from
- * Millionaire Challenge.
- */
+
 export async function checkMillionaireAchievements({
   studentId,
   levelReached,
@@ -46,6 +43,13 @@ export async function checkMillionaireAchievements({
       ACHIEVEMENT_CODES.LEVEL10_MASTER
     );
   }
+
+  if (levelReached >= 15) {
+    codes.push(
+      ACHIEVEMENT_CODES.LEVEL15_EXPERT
+    );
+  }
+
 
   if (score >= 100000) {
     codes.push(

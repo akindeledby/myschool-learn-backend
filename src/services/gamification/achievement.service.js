@@ -158,9 +158,9 @@ export async function getAchievementsForStudent({
 }) {
     const definitions =
         await db.achievementDefinition.findMany({
-            orderBy: {
-                title: "asc",
-            },
+            // orderBy: {
+            //     title: "asc",
+            // },
         });
 
     const earned =

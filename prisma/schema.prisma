@@ -205,6 +205,7 @@ model StudentScore {
 
   testTotalCorrect    Int      @default(0)
   testTotalQuestions  Int      @default(0)
+  testTotalScore      Float      @default(0)
   testCount           Int      @default(0)
 
   testLowestScore     Float    @default(0)
