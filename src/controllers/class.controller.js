@@ -44,6 +44,7 @@ export async function getClasses(
   }
 }
 
+
 export async function getClassSubjects(
   req,
   res
@@ -86,7 +87,16 @@ export async function getClassSubjects(
       await db.classSubject.findMany({
         where: {
           classId: student.classId,
+
+          subject: {
+            topics: {
+              some: {
+                status: "COMPLETED",
+              },
+            },
+          },
         },
+
         include: {
           subject: true,
         },
@@ -95,7 +105,7 @@ export async function getClassSubjects(
     if (classSubjects.length === 0) {
       return res.status(404).json({
         message:
-          "No subjects found for this class",
+          "No subjects with completed topics found for this class",
       });
     }
 
@@ -117,6 +127,82 @@ export async function getClassSubjects(
     });
   }
 }
+
+
+// export async function getClassSubjects(
+//   req,
+//   res
+// ) {
+//   try {
+//     const userId = req.user.userId;
+//     const { studentId } = req.query;
+
+//     let student;
+
+//     if (studentId) {
+//       student = await db.student.findUnique({
+//         where: {
+//           id: studentId,
+
+//         },
+//         select: {
+//           id: true,
+//           classId: true,
+//         },
+//       });
+//     } else {
+//       student = await db.student.findUnique({
+//         where: {
+//           userId,
+//         },
+//         select: {
+//           id: true,
+//           classId: true,
+//         },
+//       });
+//     }
+
+//     if (!student) {
+//       return res.status(404).json({
+//         message: "Student record not found",
+//       });
+//     }
+
+//     const classSubjects =
+//       await db.classSubject.findMany({
+//         where: {
+//           classId: student.classId,
+//         },
+//         include: {
+//           subject: true,
+//         },
+//       });
+
+//     if (classSubjects.length === 0) {
+//       return res.status(404).json({
+//         message:
+//           "No subjects found for this class",
+//       });
+//     }
+
+//     const subjects = classSubjects
+//       .map(({ subject }) => subject)
+//       .sort((a, b) =>
+//         a.name.localeCompare(b.name)
+//       );
+
+//     return res.status(200).json(subjects);
+//   } catch (error) {
+//     console.error(
+//       "getClassSubjects error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       message: "Failed to fetch subjects",
+//     });
+//   }
+// }
 
 
 export async function getTopicsBySubject(

@@ -61,10 +61,12 @@ export async function generateTutorImage({
                     • simple uncluttered background
                     • classroom appropriate
                     • suitable for the student's class level
+                    • moderate or low quality. Not high or ultra-high quality
                     • no watermark
                     • no unnecessary text
                     • do not include decorative text unless explicitly requested
                     • accurately represent the subject described below
+                    
 
                     Image request:
 

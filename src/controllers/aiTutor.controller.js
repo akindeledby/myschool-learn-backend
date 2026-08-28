@@ -14,7 +14,7 @@ import { updateLearningProfile } from "../services/elevenLabs/learningProfile.se
 import { checkAchievements } from "../services/elevenLabs/achievement.service.js";
 import { checkSubscriptionAccess } from "../services/subscription/subscription.access.js";
 import { SUBSCRIPTION_FEATURES } from "../services/subscription/subscription.constants.js";
-import { generateTutorSpeech } from "../services/audio/tts.service.js";
+import { generateTutorSpeech } from "../services/audio/aITutorTTS.service.js";
 
 import { createTutorImage } from "../services/elevenLabs/createTutorImage.js";
 
@@ -140,6 +140,11 @@ export async function chatWithTutorStream(req, res) {
       "that's good",
       "that is great",
       "that's great",
+      "thanks",
+      "thank you",
+      "Good",
+      "ok",
+      "ok thanks"
     ];
 
     if (
@@ -315,12 +320,6 @@ export async function chatWithTutorStream(req, res) {
     ==========================================
     */
 
-    /*
-==========================================
-START GEMINI STREAM
-==========================================
-*/
-
     let fullResponse = "";
 
     let sentenceBuffer = "";
@@ -332,13 +331,26 @@ START GEMINI STREAM
         previousMessages,
       });
 
+    
     /*
-    ==========================================
-    SEND TEXT + AUDIO TO FRONTEND
-    ==========================================
-    */
+==========================================
+GET STUDENT GENDER FOR TUTOR VOICE
+==========================================
+*/
 
+const studentVoiceProfile =
+  await db.student.findUnique({
+    where: {
+      id: student.id,
+    },
 
+    select: {
+      gender: true,
+    },
+  });
+
+const studentGender =
+  studentVoiceProfile?.gender || null;
 
     /*
     ==========================================
@@ -358,128 +370,6 @@ START GEMINI STREAM
 
     let nextSequenceToSend = 1;
 
-    // async function processSentence(
-    //   sentence,
-    //   sequence
-    // ) {
-    //   try {
-    //     const speech =
-    //       await generateTutorSpeech({
-    //         text: sentence,
-    //         voice: "default",
-    //         speed: 1,
-    //       });
-
-
-    //     pendingSentences.set(
-    //       sequence,
-    //       {
-    //         sequence,
-    //         text: sentence,
-    //         audio: speech?.audioBuffer
-    //           ? speech.audioBuffer.toString("base64")
-    //           : null,
-    //       }
-    //     );
-
-    //     /*
-    //     ========================================
-    //     Send completed sentences in order
-    //     ========================================
-    //     */
-
-    //     while (
-    //       pendingSentences.has(
-    //         nextSequenceToSend
-    //       )
-    //     ) {
-    //       const result =
-    //         pendingSentences.get(
-    //           nextSequenceToSend
-    //         );
-
-    //       pendingSentences.delete(
-    //         nextSequenceToSend
-    //       );
-
-    //       res.write(
-    //         `data: ${JSON.stringify({
-    //           type: "sentence",
-    //           sequence:
-    //             result.sequence,
-    //           text: result.text,
-    //           audio:
-    //             result.audio,
-    //           audioMimeType:
-    //             "audio/mpeg",
-    //         })}\n\n`
-    //       );
-
-    //       if (res.flush) {
-    //         res.flush();
-    //       }
-
-    //       nextSequenceToSend++;
-    //     }
-
-    //   } catch (error) {
-    //     console.error(
-    //       `[TutorStream] TTS failed for sentence ${sequence}:`,
-    //       error
-    //     );
-
-    //     /*
-    //     ========================================
-    //     Mark failed sentence as completed
-    //     so later sentences are not blocked
-    //     ========================================
-    //     */
-
-    //     pendingSentences.set(
-    //       sequence,
-    //       {
-    //         sequence,
-    //         text: sentence,
-    //         audio: null,
-    //       }
-    //     );
-
-    //     while (
-    //       pendingSentences.has(
-    //         nextSequenceToSend
-    //       )
-    //     ) {
-    //       const result =
-    //         pendingSentences.get(
-    //           nextSequenceToSend
-    //         );
-
-    //       pendingSentences.delete(
-    //         nextSequenceToSend
-    //       );
-
-    //       res.write(
-    //         `data: ${JSON.stringify({
-    //           type: "sentence",
-    //           sequence:
-    //             result.sequence,
-    //           text: result.text,
-    //           audio:
-    //             result.audio,
-    //           audioMimeType:
-    //             "audio/mpeg",
-    //         })}\n\n`
-    //       );
-
-    //       if (res.flush) {
-    //         res.flush();
-    //       }
-
-    //       nextSequenceToSend++;
-    //     }
-    //   }
-    // }
-
     async function processSentence(
       sentence,
       sequence
@@ -488,6 +378,7 @@ START GEMINI STREAM
         const speech =
           await generateTutorSpeech({
             text: sentence,
+            gender: studentGender,
             voice: "default",
             speed: 1,
           });
@@ -792,7 +683,7 @@ START GEMINI STREAM
     SAVE COMPLETE ASSISTANT RESPONSE
     ==========================================
     */
-   
+
     await saveMessage({
       conversationId: conversation.id,
 

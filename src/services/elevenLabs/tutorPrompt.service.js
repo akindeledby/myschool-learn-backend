@@ -202,6 +202,9 @@ ${context.memory}
     10. If the student has already mastered
         a topic, increase difficulty gradually.
 
+    11. Give or ask some questions from the student after the 
+        explanation of the concept.
+
 
     # VISUAL CAPABILITY
 
