@@ -138,9 +138,6 @@ export async function generateTutorSpeech({
     cleanTextForTTS(text);
 
   if (!cleanedText) {
-    console.log(
-      "⚠️ TTS skipped because cleaned text is empty"
-    );
 
     return null;
   }
@@ -157,44 +154,6 @@ export async function generateTutorSpeech({
           .trim()
           .toLowerCase()
       : null;
-
-  /*
-  ================================================
-  DEBUG
-  ================================================
-  */
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "🧑‍🎓 TUTOR STUDENT VOICE DEBUG"
-  );
-
-  console.log(
-    "Original gender:",
-    gender
-  );
-
-  console.log(
-    "Normalized gender:",
-    normalizedGender
-  );
-
-  console.log(
-    "Speaking speed:",
-    speed
-  );
-
-  console.log(
-    "Text length:",
-    cleanedText.length
-  );
-
-  console.log(
-    "========================================"
-  );
 
   /*
   ================================================

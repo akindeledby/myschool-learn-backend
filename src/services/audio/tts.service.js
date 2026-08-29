@@ -10,18 +10,43 @@ function cleanTextForTTS(text) {
 
   return text
     .replace(/\*\*(.*?)\*\*/gs, "$1")
+
     .replace(/\*(.*?)\*/gs, "$1")
+
     .replace(/`([^`]+)`/g, "$1")
+
     .replace(/^#{1,6}\s*/gm, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+
+    .replace(
+      /\[([^\]]+)\]\([^)]+\)/g,
+      "$1"
+    )
+
     .replace(/~~(.*?)~~/gs, "$1")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/^\s*>\s?/gm, "")
+
+    .replace(
+      /^\s*[-*+]\s+/gm,
+      ""
+    )
+
+    .replace(
+      /^\s*\d+\.\s+/gm,
+      ""
+    )
+
+    .replace(
+      /^\s*>\s?/gm,
+      ""
+    )
+
     .replace(/\*/g, "")
+
     .replace(/_/g, "")
+
     .replace(/~/g, "")
+
     .replace(/\s+/g, " ")
+
     .trim();
 }
 
@@ -35,7 +60,7 @@ export async function generateTTS({
   topicId,
   sceneId,
   text,
-  voice = "Kore",
+  voice = "en-GB-Neural2-B",
   speed = 1.1,
 }) {
   if (!text?.trim()) {
@@ -72,14 +97,14 @@ export async function generateTTS({
   }
 
   const fileName =
-    `scene-${sceneId}.wav`;
+    `scene-${sceneId}.mp3`;
 
   const s3Key =
     `audio/${topicId}/${fileName}`;
 
   try {
     console.log(
-      `🎤 Generating Gemini TTS audio for scene ${sceneId}`
+      `🎤 Generating audio for scene ${sceneId}`
     );
 
     const audioBuffer =
@@ -94,15 +119,9 @@ export async function generateTTS({
       !audioBuffer.length
     ) {
       throw new Error(
-        `Gemini TTS provider returned empty audio for scene ${sceneId}`
+        `TTS provider returned empty audio for scene ${sceneId}`
       );
     }
-
-    /*
-    ========================================
-    GET AUDIO DURATION
-    ========================================
-    */
 
     const durationInSeconds =
       await getAudioDurationFromBuffer(
@@ -118,12 +137,6 @@ export async function generateTTS({
       );
     }
 
-    /*
-    ========================================
-    VIDEO FRAME DURATION
-    ========================================
-    */
-
     const fps = 30;
 
     const durationInFrames =
@@ -131,39 +144,17 @@ export async function generateTTS({
         durationInSeconds * fps
       );
 
-    /*
-    ========================================
-    UPLOAD TO S3
-    ========================================
-    */
-
     await s3.send(
       new PutObjectCommand({
         Bucket: bucketName,
-
         Key: s3Key,
-
         Body: audioBuffer,
-
-        ContentType:
-          "audio/wav",
+        ContentType: "audio/mpeg",
       })
     );
 
     const audioUrl =
       `https://${bucketName}.s3.${region}.amazonaws.com/${s3Key}`;
-
-    console.log(
-      `✅ Scene ${sceneId} audio uploaded`
-    );
-
-    console.log(
-      `⏱️ Duration: ${durationInSeconds.toFixed(2)}s`
-    );
-
-    console.log(
-      `🎞️ Frames: ${durationInFrames}`
-    );
 
     return {
       sceneId,
@@ -176,13 +167,14 @@ export async function generateTTS({
 
   } catch (error) {
     console.error(
-      `❌ Gemini TTS generation failed for scene ${sceneId}`,
+      `❌ TTS generation failed for scene ${sceneId}`,
       error
     );
 
     throw error;
   }
 }
+
 
 // import { PutObjectCommand } from "@aws-sdk/client-s3";
 // import { s3 } from "../../lib/aws-s3.js";
@@ -196,43 +188,18 @@ export async function generateTTS({
 
 //   return text
 //     .replace(/\*\*(.*?)\*\*/gs, "$1")
-
 //     .replace(/\*(.*?)\*/gs, "$1")
-
 //     .replace(/`([^`]+)`/g, "$1")
-
 //     .replace(/^#{1,6}\s*/gm, "")
-
-//     .replace(
-//       /\[([^\]]+)\]\([^)]+\)/g,
-//       "$1"
-//     )
-
+//     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
 //     .replace(/~~(.*?)~~/gs, "$1")
-
-//     .replace(
-//       /^\s*[-*+]\s+/gm,
-//       ""
-//     )
-
-//     .replace(
-//       /^\s*\d+\.\s+/gm,
-//       ""
-//     )
-
-//     .replace(
-//       /^\s*>\s?/gm,
-//       ""
-//     )
-
+//     .replace(/^\s*[-*+]\s+/gm, "")
+//     .replace(/^\s*\d+\.\s+/gm, "")
+//     .replace(/^\s*>\s?/gm, "")
 //     .replace(/\*/g, "")
-
 //     .replace(/_/g, "")
-
 //     .replace(/~/g, "")
-
 //     .replace(/\s+/g, " ")
-
 //     .trim();
 // }
 
@@ -246,8 +213,8 @@ export async function generateTTS({
 //   topicId,
 //   sceneId,
 //   text,
-//   voice = "en-GB-Neural2-D",
-//   speed = 1,
+//   voice = "Kore",
+//   speed = 1.1,
 // }) {
 //   if (!text?.trim()) {
 //     throw new Error(
@@ -283,14 +250,14 @@ export async function generateTTS({
 //   }
 
 //   const fileName =
-//     `scene-${sceneId}.mp3`;
+//     `scene-${sceneId}.wav`;
 
 //   const s3Key =
 //     `audio/${topicId}/${fileName}`;
 
 //   try {
 //     console.log(
-//       `🎤 Generating audio for scene ${sceneId}`
+//       `🎤 Generating Gemini TTS audio for scene ${sceneId}`
 //     );
 
 //     const audioBuffer =
@@ -305,9 +272,15 @@ export async function generateTTS({
 //       !audioBuffer.length
 //     ) {
 //       throw new Error(
-//         `TTS provider returned empty audio for scene ${sceneId}`
+//         `Gemini TTS provider returned empty audio for scene ${sceneId}`
 //       );
 //     }
+
+//     /*
+//     ========================================
+//     GET AUDIO DURATION
+//     ========================================
+//     */
 
 //     const durationInSeconds =
 //       await getAudioDurationFromBuffer(
@@ -323,6 +296,12 @@ export async function generateTTS({
 //       );
 //     }
 
+//     /*
+//     ========================================
+//     VIDEO FRAME DURATION
+//     ========================================
+//     */
+
 //     const fps = 30;
 
 //     const durationInFrames =
@@ -330,17 +309,39 @@ export async function generateTTS({
 //         durationInSeconds * fps
 //       );
 
+//     /*
+//     ========================================
+//     UPLOAD TO S3
+//     ========================================
+//     */
+
 //     await s3.send(
 //       new PutObjectCommand({
 //         Bucket: bucketName,
+
 //         Key: s3Key,
+
 //         Body: audioBuffer,
-//         ContentType: "audio/mpeg",
+
+//         ContentType:
+//           "audio/wav",
 //       })
 //     );
 
 //     const audioUrl =
 //       `https://${bucketName}.s3.${region}.amazonaws.com/${s3Key}`;
+
+//     console.log(
+//       `✅ Scene ${sceneId} audio uploaded`
+//     );
+
+//     console.log(
+//       `⏱️ Duration: ${durationInSeconds.toFixed(2)}s`
+//     );
+
+//     console.log(
+//       `🎞️ Frames: ${durationInFrames}`
+//     );
 
 //     return {
 //       sceneId,
@@ -353,7 +354,7 @@ export async function generateTTS({
 
 //   } catch (error) {
 //     console.error(
-//       `❌ TTS generation failed for scene ${sceneId}`,
+//       `❌ Gemini TTS generation failed for scene ${sceneId}`,
 //       error
 //     );
 

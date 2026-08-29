@@ -133,10 +133,37 @@ export async function determineTutorVisual({
     const result =
       JSON.parse(raw);
 
+    console.log(
+      "[TutorVisualDecision] Raw Gemini result:",
+      raw
+    );
+
+    console.log(
+      "[TutorVisualDecision] Parsed result:",
+      result
+    );
+
     if (
       !result?.shouldGenerate ||
       !result?.prompt?.trim()
     ) {
+      console.log(
+        "[TutorVisualDecision] Image not generated because:",
+        {
+          shouldGenerate:
+            result?.shouldGenerate,
+
+          prompt:
+            result?.prompt,
+
+          alt:
+            result?.alt,
+
+          caption:
+            result?.caption,
+        }
+      );
+
       return {
         shouldGenerate: false,
         prompt: null,
