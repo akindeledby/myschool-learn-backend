@@ -171,6 +171,7 @@ export async function chatWithTutorStream(req, res) {
       "good",
       "ok",
       "ok thanks",
+      "ok, thanks"
     ];
 
     if (
@@ -360,341 +361,157 @@ export async function chatWithTutorStream(req, res) {
       }
     }
 
-/*
-==========================================
-STREAMING ORCHESTRATION
-==========================================
-*/
+    /*
+    ==========================================
+    START GEMINI STREAM
+    ==========================================
+    */
 
-let fullResponse = "";
-let sentenceBuffer = "";
+    let fullResponse = "";
+    let sentenceBuffer = "";
 
-const stream =
-  await streamTutorResponse({
-    systemPrompt,
-    message,
-    previousMessages,
-  });
-
-/*
-==========================================
-GET STUDENT GENDER FOR TUTOR VOICE
-==========================================
-*/
-
-const studentVoiceProfile =
-  await db.student.findUnique({
-    where: {
-      id: student.id,
-    },
-
-    select: {
-      gender: true,
-    },
-  });
-
-const studentGender =
-  studentVoiceProfile?.gender || null;
-
-/*
-==========================================
-SENTENCE / AUDIO STATE
-==========================================
-*/
-
-let sentenceSequence = 0;
-
-const sentenceResults = new Map();
-
-const ttsTasks = [];
-
-const audioSegmentTasks = [];
-
-const audioSegments = [];
-
-/*
-==========================================
-IMAGE STATE
-==========================================
-*/
-
-const IMAGE_INSERT_AFTER_SENTENCE = 2;
-
-let imageGenerationStarted = false;
-
-let imageGenerationTask = null;
-
-let generatedImage = null;
-
-let imageDelivered = false;
-
-/*
-==========================================
-DELIVERY STATE
-==========================================
-
-IMPORTANT:
-
-Only this delivery coordinator writes
-sentence/image events to res.
-
-TTS workers NEVER write directly to res.
-==========================================
-*/
-
-let nextSequenceToSend = 1;
-
-/*
-==========================================
-START IMAGE GENERATION
-==========================================
-*/
-
-function startImageGeneration() {
-  if (imageGenerationStarted) {
-    return;
-  }
-
-  imageGenerationStarted = true;
-
-  const imageResponse =
-    fullResponse;
-
-  console.log(
-    "[TutorStream] Starting image generation..."
-  );
-
-  console.log(
-    "[TutorStream] Image response length:",
-    imageResponse.length
-  );
-
-  imageGenerationTask =
-    createTutorImage({
-      studentMessage: message,
-
-      tutorResponse:
-        imageResponse,
-
-      studentId:
-        student.id,
-
-      conversationId:
-        conversation.id,
-    })
-      .then((image) => {
-        console.log(
-          "[TutorStream] Image generation completed:",
-          Boolean(image)
-        );
-
-        generatedImage = image || null;
-
-        return generatedImage;
-      })
-      .catch((error) => {
-        console.error(
-          "[TutorStream] Image generation task failed:",
-          error
-        );
-
-        generatedImage = null;
-
-        return null;
+    const stream =
+      await streamTutorResponse({
+        systemPrompt,
+        message,
+        previousMessages,
       });
-}
-
-/*
-==========================================
-WRITE IMAGE EVENT
-==========================================
-*/
-
-function sendImage() {
-  if (
-    imageDelivered ||
-    !generatedImage
-  ) {
-    return;
-  }
-
-  console.log(
-    "[TutorStream] Sending image after sentence:",
-    IMAGE_INSERT_AFTER_SENTENCE
-  );
-
-  res.write(
-    `data: ${JSON.stringify({
-      type: "image",
-
-      image: generatedImage,
-
-      afterSequence:
-        IMAGE_INSERT_AFTER_SENTENCE,
-    })}\n\n`
-  );
-
-  if (res.flush) {
-    res.flush();
-  }
-
-  imageDelivered = true;
-}
-
-/*
-==========================================
-SEND NEXT ORDERED SENTENCE
-==========================================
-*/
-
-async function sendOrderedSentences() {
-  while (true) {
-    const result =
-      sentenceResults.get(
-        nextSequenceToSend
-      );
 
     /*
-    --------------------------------------
-    No next sentence available yet.
-    --------------------------------------
+    ==========================================
+    GET STUDENT VOICE PROFILE
+    ==========================================
     */
 
-    if (!result) {
-      break;
-    }
+    const studentVoiceProfile =
+      await db.student.findUnique({
+        where: {
+          id: student.id,
+        },
+
+        select: {
+          gender: true,
+        },
+      });
+
+    const studentGender =
+      studentVoiceProfile?.gender ||
+      null;
 
     /*
-    ======================================
-    IMAGE BARRIER
-    ======================================
-
-    If we are about to send sentence 3,
-    the image must be resolved first.
-
-    Therefore:
-
-    S1
-    S2
-    IMAGE
-    S3
-
-    is guaranteed.
-    ======================================
+    ==========================================
+    STREAMING STATE
+    ==========================================
     */
 
-    if (
-      !imageDelivered &&
-      nextSequenceToSend >
-        IMAGE_INSERT_AFTER_SENTENCE &&
-      imageGenerationStarted
-    ) {
-      console.log(
-        "[TutorStream] Waiting for image before sending sentence:",
-        nextSequenceToSend
-      );
+    let sentenceSequence = 0;
 
-      if (imageGenerationTask) {
-        await imageGenerationTask;
+    const sentenceResults = new Map();
+
+    const completedSentences = new Map();
+
+    const ttsTasks = [];
+
+    const audioSegmentTasks = [];
+
+    const audioSegments = [];
+
+    /*
+    ==========================================
+    PERSISTENT CONTENT BLOCKS
+    ==========================================
+    */
+
+    const contentBlocks = [];
+
+    /*
+    ==========================================
+    IMAGE STATE
+    ==========================================
+    */
+
+    const IMAGE_INSERT_AFTER_SENTENCE = 2;
+
+    let imageGenerationStarted = false;
+
+    let imageGenerationTask = null;
+
+    let generatedImage = null;
+
+    let imageDelivered = false;
+
+    /*
+    ==========================================
+    ORDERED DELIVERY STATE
+    ==========================================
+    */
+
+    let nextSequenceToSend = 1;
+
+    let deliveryRunning = false;
+
+    let deliveryRequested = false;
+
+    /*
+    ==========================================
+    START IMAGE GENERATION
+    ==========================================
+    */
+
+    function startImageGeneration() {
+      if (imageGenerationStarted) {
+        return;
       }
 
+      imageGenerationStarted = true;
+
       /*
-      ------------------------------------
-      Image generation has completed.
-      ------------------------------------
+      ========================================
+      USE THE SENTENCES AVAILABLE SO FAR
+
+      At this point we normally have reached
+      sentence 2.
+
+      We deliberately do NOT use fullResponse
+      because Gemini may still be generating
+      the rest of the answer.
+      ========================================
       */
 
-      sendImage();
-    }
+      const imageContext =
+        Array.from(
+          sentenceResults.values()
+        )
+          .sort(
+            (a, b) =>
+              a.sequence - b.sequence
+          )
+          .map(
+            (result) =>
+              result.text
+          )
+          .join(" ")
+          .trim();
 
-    /*
-    ======================================
-    SEND SENTENCE
-    ======================================
-    */
+      /*
+      ========================================
+      FALLBACK
 
-    sentenceResults.delete(
-      nextSequenceToSend
-    );
+      This should only really matter for very
+      short responses.
+      ========================================
+      */
 
-    console.log(
-      "[TutorStream] Sending sentence:",
-      result.sequence
-    );
+      const tutorResponseForImage =
+        imageContext ||
+        fullResponse;
 
-    res.write(
-      `data: ${JSON.stringify({
-        type: "sentence",
+      imageGenerationTask =
+        createTutorImage({
+          studentMessage: message,
 
-        sequence:
-          result.sequence,
-
-        text:
-          result.text,
-
-        audio:
-          result.audio,
-
-        audioMimeType:
-          "audio/mpeg",
-      })}\n\n`
-    );
-
-    if (res.flush) {
-      res.flush();
-    }
-
-    nextSequenceToSend++;
-  }
-}
-
-/*
-==========================================
-GENERATE TTS FOR ONE SENTENCE
-==========================================
-*/
-
-async function processSentence(
-  sentence,
-  sequence
-) {
-  try {
-    /*
-    ======================================
-    GENERATE TTS
-    ======================================
-    */
-
-    const speech =
-      await generateTutorSpeech({
-        text: sentence,
-
-        gender:
-          studentGender,
-
-        voice:
-          "default",
-
-        speed: 1,
-      });
-
-    /*
-    ======================================
-    STORE AUDIO FOR REPLAY
-    ======================================
-    */
-
-    if (
-      speech?.audioBuffer &&
-      speech.audioBuffer.length > 0
-    ) {
-      const uploadTask =
-        uploadTutorAudio({
-          buffer:
-            speech.audioBuffer,
-
-          mimeType:
-            "audio/mpeg",
+          tutorResponse:
+            tutorResponseForImage,
 
           studentId:
             student.id,
@@ -702,404 +519,801 @@ async function processSentence(
           conversationId:
             conversation.id,
 
-          sequence,
+          afterSequence:
+            IMAGE_INSERT_AFTER_SENTENCE,
         })
-          .then((uploaded) => {
-            if (!uploaded?.url) {
-              throw new Error(
-                "Tutor audio upload did not return a URL."
-              );
-            }
+          .then((image) => {
+            generatedImage =
+              image || null;
 
-            audioSegments.push({
-              sequence,
-
-              text:
-                sentence,
-
-              url:
-                uploaded.url,
-
-              mimeType:
-                uploaded.mimeType ||
-                "audio/mpeg",
-
-              storageKey:
-                uploaded.storageKey,
-            });
+            return generatedImage;
           })
           .catch((error) => {
             console.error(
-              `[TutorStream] Failed to store audio segment ${sequence}:`,
+              "[TutorStream] Image generation task failed:",
               error
             );
+
+            generatedImage = null;
+
+            return null;
+          });
+    }
+
+    /*
+    ==========================================
+    SEND IMAGE
+    ==========================================
+    */
+
+    function sendImage() {
+      if (
+        imageDelivered ||
+        !generatedImage
+      ) {
+        return;
+      }
+
+      res.write(
+        `data: ${JSON.stringify({
+          type: "image",
+
+          image: generatedImage,
+
+          afterSequence:
+            generatedImage.afterSequence ??
+            IMAGE_INSERT_AFTER_SENTENCE,
+        })}\n\n`
+      );
+
+      if (res.flush) {
+        res.flush();
+      }
+
+      imageDelivered = true;
+    }
+
+    /*
+    ==========================================
+    ORDERED SENTENCE DELIVERY
+    ==========================================
+
+    This function guarantees:
+
+    S1
+    S2
+    IMAGE
+    S3
+    S4
+
+    when an image exists.
+
+    If no image exists:
+
+    S1
+    S2
+    S3
+    S4
+
+    continues normally.
+    ==========================================
+    */
+
+    async function sendOrderedSentences() {
+      // console.log(
+      // "[TutorStream] sendOrderedSentences called",
+      // {
+      //     nextSequenceToSend,
+      //     availableSequences: Array.from(
+      //       sentenceResults.keys()
+      //     ),
+      //     imageGenerationStarted,
+      //     imageDelivered,
+      //     generatedImage: Boolean(
+      //       generatedImage
+      //     ),
+      //   }
+      // );
+      while (true) {
+        const result =
+          sentenceResults.get(
+            nextSequenceToSend
+          );
+
+        /*
+        --------------------------------------
+        The next sentence is not ready yet.
+        --------------------------------------
+        */
+
+        if (!result) {
+          break;
+        }
+
+        /*
+        ======================================
+        IMAGE BARRIER
+        ======================================
+
+        Only applies when we are about to
+        cross the image insertion point.
+
+        If image generation is still running,
+        wait for it.
+
+        If it returns null, continue normally.
+
+        If it returns an image, send it first.
+        ======================================
+        */
+
+        if (
+          !imageDelivered &&
+          nextSequenceToSend >
+            IMAGE_INSERT_AFTER_SENTENCE &&
+          imageGenerationStarted
+        ) {
+          if (imageGenerationTask) {
+            await imageGenerationTask;
+          }
+
+          /*
+          ------------------------------------
+          Image was generated.
+          ------------------------------------
+          */
+
+          if (generatedImage) {
+            sendImage();
+          }
+
+          /*
+          ------------------------------------
+          If generatedImage is null, there is
+          simply no image.
+
+          DO NOT BLOCK THE TEXT STREAM.
+          ------------------------------------
+          */
+        }
+
+        /*
+        ======================================
+        SEND SENTENCE
+        ======================================
+        */
+
+        sentenceResults.delete(
+          nextSequenceToSend
+        );
+
+        // console.log(
+        //   `[TutorStream] >>> SENDING SENTENCE ${result.sequence} TO FRONTEND:`,
+        //   result.text
+        // );
+
+        res.write(
+          `data: ${JSON.stringify({
+            type: "sentence",
+
+            sequence:
+              result.sequence,
+
+            text:
+              result.text,
+
+            audio:
+              result.audio,
+
+            audioMimeType:
+              "audio/mpeg",
+          })}\n\n`
+        );
+
+        if (res.flush) {
+          res.flush();
+        }
+
+        nextSequenceToSend++;
+      }
+    }
+
+    /*
+    ==========================================
+    REQUEST ORDERED DELIVERY
+    ==========================================
+
+    Multiple TTS tasks can finish at the same
+    time.
+
+    This prevents multiple instances of
+    sendOrderedSentences() from modifying
+    nextSequenceToSend simultaneously.
+    ==========================================
+    */
+
+    async function requestOrderedDelivery() {
+      deliveryRequested = true;
+
+      if (deliveryRunning) {
+        return;
+      }
+
+      deliveryRunning = true;
+
+      try {
+        while (deliveryRequested) {
+          deliveryRequested = false;
+
+          await sendOrderedSentences();
+        }
+      } finally {
+        deliveryRunning = false;
+      }
+    }
+
+    /*
+    ==========================================
+    GENERATE TTS FOR ONE SENTENCE
+    ==========================================
+    */
+
+    async function processSentence(
+      sentence,
+      sequence
+    ) {
+      try {
+        /*
+        ======================================
+        GENERATE SPEECH
+        ======================================
+        */
+
+        const speech =
+          await generateTutorSpeech({
+            text: sentence,
+
+            gender:
+              studentGender,
+
+            voice:
+              "default",
+
+            speed: 1,
           });
 
-      audioSegmentTasks.push(
-        uploadTask
+        /*
+        ======================================
+        STORE AUDIO FOR REPLAY
+        ======================================
+        */
+
+        if (
+          speech?.audioBuffer &&
+          speech.audioBuffer.length > 0
+        ) {
+          const uploadTask =
+            uploadTutorAudio({
+              buffer:
+                speech.audioBuffer,
+
+              mimeType:
+                "audio/mpeg",
+
+              studentId:
+                student.id,
+
+              conversationId:
+                conversation.id,
+
+              sequence,
+            })
+              .then((uploaded) => {
+                if (!uploaded?.url) {
+                  throw new Error(
+                    "Tutor audio upload did not return a URL."
+                  );
+                }
+
+                audioSegments.push({
+                  sequence,
+
+                  text:
+                    sentence,
+
+                  url:
+                    uploaded.url,
+
+                  mimeType:
+                    uploaded.mimeType ||
+                    "audio/mpeg",
+
+                  storageKey:
+                    uploaded.storageKey,
+                });
+              })
+              .catch((error) => {
+                console.error(
+                  `[TutorStream] Failed to store audio segment ${sequence}:`,
+                  error
+                );
+              });
+
+          audioSegmentTasks.push(
+            uploadTask
+          );
+        }
+
+        /*
+        ======================================
+        STORE SENTENCE RESULT
+        ======================================
+        */
+
+        // sentenceResults.set(
+        //   sequence,
+        //   {
+        //     sequence,
+
+        //     text:
+        //       sentence,
+
+        //     audio:
+        //       speech?.audioBuffer
+        //         ? speech.audioBuffer.toString(
+        //             "base64"
+        //           )
+        //         : null,
+        //   }
+        // );
+
+        const sentenceResult = {
+  sequence,
+  text: sentence,
+  audio:
+    speech?.audioBuffer
+      ? speech.audioBuffer.toString("base64")
+      : null,
+};
+
+sentenceResults.set(
+  sequence,
+  sentenceResult
+);
+
+completedSentences.set(
+  sequence,
+  {
+    sequence,
+    text: sentence,
+  }
+);
+
+      // console.log(
+      //   `[TutorStream] Sentence ${sequence} ready for delivery:`,
+      //   sentence
+      // );
+
+        await requestOrderedDelivery();
+      } catch (error) {
+        console.error(
+          `[TutorStream] TTS failed for sentence ${sequence}:`,
+          error
+        );
+
+        /*
+        ======================================
+        TTS FAILURE
+
+        The text must still be delivered.
+        ======================================
+        */
+
+        // sentenceResults.set(
+        //   sequence,
+        //   {
+        //     sequence,
+
+        //     text:
+        //       sentence,
+
+        //     audio:
+        //       null,
+        //   }
+        // );
+
+        const sentenceResult = {
+          sequence,
+          text: sentence,
+          audio: null,
+        };
+
+        sentenceResults.set(
+          sequence,
+          sentenceResult
+        );
+
+      completedSentences.set(
+        sequence,
+        {
+          sequence,
+          text: sentence,
+        }
+      );
+
+        await requestOrderedDelivery();
+      }
+    }
+
+    /*
+    ==========================================
+    READ GEMINI STREAM
+    ==========================================
+    */
+
+    for await (const chunk of stream) {
+      const text = chunk.text;
+
+      if (!text) {
+        continue;
+      }
+
+      /*
+      ========================================
+      ACCUMULATE COMPLETE RESPONSE
+      ========================================
+      */
+
+      fullResponse += text;
+
+      sentenceBuffer += text;
+
+      const {
+        sentences,
+        remainder,
+      } =
+        extractCompleteSentences(
+          sentenceBuffer
+        );
+
+      sentenceBuffer =
+        remainder;
+
+      /*
+      ========================================
+      PROCESS COMPLETE SENTENCES
+      ========================================
+      */
+
+      for (const sentence of sentences) {
+        sentenceSequence++;
+
+        const currentSequence =
+          sentenceSequence;
+
+          // console.log(
+          //   `[TutorStream] >>> SENTENCE DETECTED ${currentSequence}:`,
+          //   sentence
+          // );
+
+        /*
+        ======================================
+        START IMAGE AFTER SENTENCE 2
+        ======================================
+
+        Image generation starts in the
+        background.
+
+        It does NOT block TTS.
+        ======================================
+        */
+
+        if (
+          !imageGenerationStarted &&
+          currentSequence >=
+            IMAGE_INSERT_AFTER_SENTENCE
+        ) {
+          startImageGeneration();
+        }
+
+        /*
+        ======================================
+        START TTS
+        ======================================
+        */
+
+        const ttsTask =
+          processSentence(
+            sentence,
+            currentSequence
+          );
+
+        ttsTasks.push(
+          ttsTask
+        );
+      }
+    }
+
+    /*
+    ==========================================
+    HANDLE REMAINING TEXT
+    ==========================================
+    */
+
+    const remainingText =
+      sentenceBuffer.trim();
+
+    if (remainingText) {
+      sentenceSequence++;
+
+      const currentSequence =
+        sentenceSequence;
+
+      /*
+      ========================================
+      IF RESPONSE IS SHORT
+
+      We may never have reached sentence 2,
+      so start image generation now.
+      ========================================
+      */
+
+      if (
+        !imageGenerationStarted
+      ) {
+        startImageGeneration();
+      }
+
+      const ttsTask =
+        processSentence(
+          remainingText,
+          currentSequence
+        );
+
+      ttsTasks.push(
+        ttsTask
       );
     }
 
     /*
-    ======================================
-    STORE COMPLETED SENTENCE
-    ======================================
+    ==========================================
+    WAIT FOR ALL TTS
+    ==========================================
 
-    Do NOT write to SSE here.
+    This is now only for ensuring all TTS
+    operations have completed before the
+    final persistence stage.
 
-    The delivery coordinator handles that.
-    ======================================
+    Sentences have already been streamed
+    whenever they became available.
+    ==========================================
     */
 
-    sentenceResults.set(
-      sequence,
-      {
-        sequence,
-
-        text:
-          sentence,
-
-        audio:
-          speech?.audioBuffer
-            ? speech.audioBuffer.toString(
-                "base64"
-              )
-            : null,
-      }
-    );
-
-  } catch (error) {
-    console.error(
-      `[TutorStream] TTS failed for sentence ${sequence}:`,
-      error
+    await Promise.all(
+      ttsTasks
     );
 
     /*
-    ======================================
-    TTS FAILURE
-
-    Still place the sentence in the
-    ordered queue so streaming cannot
-    become stuck.
-    ======================================
+    ==========================================
+    WAIT FOR IMAGE
+    ==========================================
     */
 
-    sentenceResults.set(
-      sequence,
-      {
-        sequence,
-
-        text:
-          sentence,
-
-        audio:
-          null,
-      }
-    );
-  }
-}
-
-/*
-==========================================
-READ GEMINI STREAM
-==========================================
-*/
-
-for await (const chunk of stream) {
-  const text = chunk.text;
-
-  if (!text) {
-    continue;
-  }
-
-  /*
-  ========================================
-  ACCUMULATE COMPLETE RESPONSE
-  ========================================
-  */
-
-  fullResponse += text;
-
-  sentenceBuffer += text;
-
-  const {
-    sentences,
-    remainder,
-  } =
-    extractCompleteSentences(
-      sentenceBuffer
-    );
-
-  sentenceBuffer =
-    remainder;
-
-  /*
-  ========================================
-  PROCESS COMPLETE SENTENCES
-  ========================================
-  */
-
-  for (const sentence of sentences) {
-    sentenceSequence++;
-
-    const currentSequence =
-      sentenceSequence;
-
-    /*
-    ======================================
-    START IMAGE AFTER SENTENCE 2
-    ======================================
-
-    We start image generation as soon as
-    sentence 2 has been identified.
-
-    TTS continues independently.
-    ======================================
-    */
-
-    if (
-      !imageGenerationStarted &&
-      currentSequence >=
-        IMAGE_INSERT_AFTER_SENTENCE
-    ) {
-      startImageGeneration();
+    if (imageGenerationTask) {
+      await imageGenerationTask;
     }
 
     /*
-    ======================================
-    START TTS
+    ==========================================
+    FINAL ORDERED DELIVERY
+    ==========================================
 
-    TTS runs concurrently.
-
-    It only places its result into
-    sentenceResults.
-
-    It does NOT touch res.
-    ======================================
+    This catches anything that may still be
+    waiting in the ordered queue.
+    ==========================================
     */
 
-    ttsTasks.push(
-      processSentence(
-        sentence,
-        currentSequence
-      )
+    await requestOrderedDelivery();
+
+    /*
+    ==========================================
+    FINAL IMAGE FALLBACK
+    ==========================================
+
+    If an image exists but there was no
+    sentence after the insertion point,
+    deliver it now.
+
+    Example:
+
+    S1
+    S2
+    IMAGE
+    ==========================================
+    */
+
+    if (
+      generatedImage &&
+      !imageDelivered
+    ) {
+      sendImage();
+    }
+
+    /*
+    ==========================================
+    WAIT FOR AUDIO STORAGE
+    ==========================================
+    */
+
+    await Promise.allSettled(
+      audioSegmentTasks
     );
 
     /*
-    ======================================
-    ATTEMPT DELIVERY
-
-    We do not wait for this TTS task
-    here.
-
-    If the sentence is not ready yet,
-    the coordinator simply stops.
-
-    When all TTS tasks finish, we flush
-    the ordered queue.
-    ======================================
+    ==========================================
+    SORT AUDIO SEGMENTS
+    ==========================================
     */
+
+    audioSegments.sort(
+      (a, b) =>
+        a.sequence - b.sequence
+    );
 
     /*
-    Do not call sendOrderedSentences()
-    here.
-
-    This is intentional.
+    ==========================================
+    BUILD PERSISTENT CONTENT BLOCKS
+    ==========================================
     */
-  }
+
+    // for (
+    //   const result
+    //     of sentenceResults.values()
+    // ) {
+    //   contentBlocks.push({
+    //     type: "text",
+
+    //     sequence:
+    //       result.sequence,
+
+    //     text:
+    //       result.text,
+    //   });
+    // }
+
+    for (const result of completedSentences.values()) {
+  contentBlocks.push({
+    type: "text",
+    sequence: result.sequence,
+    text: result.text,
+  });
 }
 
-/*
-==========================================
-HANDLE REMAINING TEXT
-==========================================
-*/
+    /*
+    ==========================================
+    ADD IMAGE CONTENT BLOCK
+    ==========================================
+    */
 
-const remainingText =
-  sentenceBuffer.trim();
+    if (generatedImage) {
+      contentBlocks.push({
+        type: "image",
 
-if (remainingText) {
-  sentenceSequence++;
+        afterSequence:
+          generatedImage.afterSequence ??
+          IMAGE_INSERT_AFTER_SENTENCE,
 
-  const currentSequence =
-    sentenceSequence;
+        image:
+          generatedImage,
+      });
+    }
 
-  /*
-  ========================================
-  START IMAGE IF RESPONSE IS SHORT
-  ========================================
+    /*
+    ==========================================
+    SORT CONTENT BLOCKS
+    ==========================================
 
-  If the response never reached sentence
-  2, start image generation using the
-  complete response.
-  ========================================
-  */
+    Text:
 
-  if (
-    !imageGenerationStarted
-  ) {
-    startImageGeneration();
-  }
+    1
+    2
+    3
+    4
 
-  ttsTasks.push(
-    processSentence(
-      remainingText,
-      currentSequence
-    )
-  );
-}
+    Image:
 
-/*
-==========================================
-WAIT FOR ALL TTS
-==========================================
-*/
+    2.5
 
-await Promise.all(
-  ttsTasks
-);
+    Result:
 
-/*
-==========================================
-WAIT FOR IMAGE
-==========================================
-*/
+    TEXT 1
+    TEXT 2
+    IMAGE
+    TEXT 3
+    TEXT 4
+    ==========================================
+    */
 
-if (
-  imageGenerationTask
-) {
-  await imageGenerationTask;
-}
+    contentBlocks.sort(
+      (a, b) => {
+        const orderA =
+          a.type === "text"
+            ? a.sequence
+            : a.afterSequence + 0.5;
 
-/*
-==========================================
-FLUSH ORDERED SENTENCES
-==========================================
+        const orderB =
+          b.type === "text"
+            ? b.sequence
+            : b.afterSequence + 0.5;
 
-At this point every TTS operation has
-finished and the image task has finished.
+        return orderA - orderB;
+      }
+    );
 
-The coordinator now has everything it
-needs to construct:
+    /*
+    ==========================================
+    SAVE COMPLETE ASSISTANT RESPONSE
+    ==========================================
+    */
 
-S1
-S2
-IMAGE
-S3
-S4
-...
-==========================================
-*/
+    await saveMessage({
+      conversationId:
+        conversation.id,
 
-await sendOrderedSentences();
+      role:
+        "assistant",
 
-/*
-==========================================
-FINAL IMAGE FALLBACK
-==========================================
+      content:
+        fullResponse,
 
-If there was an image but no sentence
-after the insertion point, make sure the
-image is still delivered.
+      contentBlocks,
 
-For example:
+      images:
+        generatedImage
+          ? [generatedImage]
+          : undefined,
 
-S1
-S2
-IMAGE
-==========================================
-*/
+      audioSegments:
+        audioSegments.length > 0
+          ? audioSegments
+          : undefined,
+    });
 
-if (
-  generatedImage &&
-  !imageDelivered
-) {
-  sendImage();
-}
+    /*
+    ==========================================
+    UPDATE CONVERSATION
+    ==========================================
+    */
 
-/*
-==========================================
-WAIT FOR AUDIO STORAGE
-==========================================
-*/
+    await db.tutorConversation.update({
+      where: {
+        id:
+          conversation.id,
+      },
 
-await Promise.allSettled(
-  audioSegmentTasks
-);
+      data: {
+        updatedAt:
+          new Date(),
+      },
+    });
 
-/*
-==========================================
-SORT AUDIO SEGMENTS
-==========================================
-*/
+    /*
+    ==========================================
+    STREAM COMPLETE
+    ==========================================
+    */
 
-audioSegments.sort(
-  (a, b) =>
-    a.sequence - b.sequence
-);
+    res.write(
+      `data: ${JSON.stringify({
+        type: "done",
+      })}\n\n`
+    );
 
-/*
-==========================================
-SAVE COMPLETE ASSISTANT RESPONSE
-==========================================
-*/
+    if (res.flush) {
+      res.flush();
+    }
 
-await saveMessage({
-  conversationId:
-    conversation.id,
-
-  role:
-    "assistant",
-
-  content:
-    fullResponse,
-
-  images:
-    generatedImage
-      ? [generatedImage]
-      : undefined,
-
-  audioSegments:
-    audioSegments.length > 0
-      ? audioSegments
-      : undefined,
-});
-
-/*
-==========================================
-UPDATE CONVERSATION
-==========================================
-*/
-
-await db.tutorConversation.update({
-  where: {
-    id:
-      conversation.id,
-  },
-
-  data: {
-    updatedAt:
-      new Date(),
-  },
-});
-
-/*
-==========================================
-STREAM COMPLETE
-==========================================
-*/
-
-res.write(
-  `data: ${JSON.stringify({
-    type: "done",
-  })}\n\n`
-);
-
-if (res.flush) {
-  res.flush();
-}
-
-res.end();
+    res.end();
 
     /*
     ==========================================
@@ -1158,7 +1372,8 @@ res.end();
       res.write(
         `data: ${JSON.stringify({
           type: "error",
-          message: "Tutor failed",
+          message:
+            "Tutor failed",
         })}\n\n`
       );
     } catch {}
@@ -1181,12 +1396,24 @@ res.end();
 //       message,
 //     } = req.body;
 
+//     /*
+//     ==========================================
+//     VALIDATE MESSAGE
+//     ==========================================
+//     */
+
 //     if (!message?.trim()) {
 //       return res.status(400).json({
 //         success: false,
 //         message: "Message is required",
 //       });
 //     }
+
+//     /*
+//     ==========================================
+//     RESOLVE STUDENT
+//     ==========================================
+//     */
 
 //     const student = await resolveStudent({
 //       userId,
@@ -1200,15 +1427,28 @@ res.end();
 //       });
 //     }
 
+//     /*
+//     ==========================================
+//     SUBSCRIPTION ACCESS
+//     ==========================================
+//     */
+
 //     const access =
 //       await checkSubscriptionAccess({
 //         userId,
-//         feature: SUBSCRIPTION_FEATURES.AI_CHAT,
+//         feature:
+//           SUBSCRIPTION_FEATURES.AI_CHAT,
 //       });
 
 //     if (!access.success) {
 //       return res.status(403).json(access);
 //     }
+
+//     /*
+//     ==========================================
+//     CLASSIFY QUESTION
+//     ==========================================
+//     */
 
 //     const classification =
 //       await classifyQuestion(message);
@@ -1225,16 +1465,17 @@ res.end();
 //       "that's good",
 //       "that is great",
 //       "that's great",
-//       "thanks",
 //       "thank you",
-//       "Good",
+//       "good",
 //       "ok",
-//       "ok thanks"
+//       "ok thanks",
 //     ];
 
 //     if (
 //       classification !== "ACADEMIC" &&
-//       !greetings.includes(normalizedMessage)
+//       !greetings.includes(
+//         normalizedMessage
+//       )
 //     ) {
 //       return res.status(400).json({
 //         success: false,
@@ -1243,28 +1484,39 @@ res.end();
 //       });
 //     }
 
+//     /*
+//     ==========================================
+//     BUILD TUTOR CONTEXT
+//     ==========================================
+//     */
+
 //     const tutorContext =
-//       await buildTutorContext(student.id);
+//       await buildTutorContext(
+//         student.id
+//       );
 
 //     const systemPrompt =
 //       buildTutorPrompt({
 //         firstName:
-//           student.firstName || "Student",
+//           student.firstName ||
+//           "Student",
 
 //         classLevel:
-//           student.classLevel || "Unknown",
+//           student.classLevel ||
+//           "Unknown",
 
-//         context: tutorContext,
+//         context:
+//           tutorContext,
 //       });
-
-//     let conversation;
-//     let isNewConversation = false;
 
 //     /*
 //     ==========================================
 //     GET OR CREATE CONVERSATION
 //     ==========================================
 //     */
+
+//     let conversation;
+//     let isNewConversation = false;
 
 //     if (conversationId) {
 //       const ownedConversation =
@@ -1315,8 +1567,11 @@ res.end();
 //     */
 
 //     await saveMessage({
-//       conversationId: conversation.id,
+//       conversationId:
+//         conversation.id,
+
 //       role: "user",
+
 //       content: message,
 //     });
 
@@ -1383,11 +1638,17 @@ res.end();
 //       res.write(
 //         `data: ${JSON.stringify({
 //           type: "conversation",
+
 //           conversation: {
-//             id: conversation.id,
-//             title: conversation.title,
+//             id:
+//               conversation.id,
+
+//             title:
+//               conversation.title,
+
 //             createdAt:
 //               conversation.createdAt,
+
 //             updatedAt:
 //               conversation.updatedAt,
 //           },
@@ -1401,12 +1662,11 @@ res.end();
 
 //     /*
 //     ==========================================
-//     START GEMINI STREAM
+//     START TUTOR STREAM
 //     ==========================================
 //     */
 
 //     let fullResponse = "";
-
 //     let sentenceBuffer = "";
 
 //     const stream =
@@ -1416,34 +1676,53 @@ res.end();
 //         previousMessages,
 //       });
 
-    
 //     /*
-// ==========================================
-// GET STUDENT GENDER FOR TUTOR VOICE
-// ==========================================
-// */
+//     ==========================================
+//     GET STUDENT GENDER
+//     ==========================================
+//     */
 
-// const studentVoiceProfile =
-//   await db.student.findUnique({
-//     where: {
-//       id: student.id,
-//     },
+//     const studentVoiceProfile =
+//       await db.student.findUnique({
+//         where: {
+//           id: student.id,
+//         },
 
-//     select: {
-//       gender: true,
-//     },
-//   });
+//         select: {
+//           gender: true,
+//         },
+//       });
 
-// const studentGender =
-//   studentVoiceProfile?.gender || null;
+//     const studentGender =
+//       studentVoiceProfile?.gender ||
+//       null;
 
 //     /*
 //     ==========================================
-//     PROCESS GEMINI CHUNKS
+//     SENTENCE / AUDIO STATE
 //     ==========================================
 //     */
 
 //     let sentenceSequence = 0;
+
+//     /*
+//     sentenceResults is the temporary
+//     ordered delivery queue.
+
+//     IMPORTANT:
+
+//     We DO NOT destroy the information
+//     needed for contentBlocks.
+//     */
+
+//     const sentenceResults = new Map();
+
+//     /*
+//     This permanently keeps every completed
+//     sentence for database persistence.
+//     */
+
+//     const completedSentences = [];
 
 //     const ttsTasks = [];
 
@@ -1451,27 +1730,258 @@ res.end();
 
 //     const audioSegments = [];
 
-//     const pendingSentences = new Map();
+//     /*
+//     ==========================================
+//     IMAGE STATE
+//     ==========================================
+//     */
+
+//     const IMAGE_INSERT_AFTER_SENTENCE = 2;
+
+//     let imageGenerationStarted = false;
+
+//     let imageGenerationTask = null;
+
+//     let generatedImage = null;
+
+//     let imageDelivered = false;
 
 //     let nextSequenceToSend = 1;
+
+//     /*
+//     ==========================================
+//     START IMAGE GENERATION
+//     ==========================================
+//     */
+
+//     function startImageGeneration() {
+//       if (imageGenerationStarted) {
+//         return;
+//       }
+
+//       imageGenerationStarted = true;
+
+//       /*
+//       IMPORTANT:
+
+//       At this point fullResponse contains
+//       everything received from Gemini so far.
+
+//       This intentionally allows image
+//       generation to run concurrently with
+//       the remainder of the tutor response.
+//       */
+
+//       const imageResponse =
+//         fullResponse;
+
+//       imageGenerationTask =
+//         createTutorImage({
+//           studentMessage:
+//             message,
+
+//           tutorResponse:
+//             imageResponse,
+
+//           studentId:
+//             student.id,
+
+//           conversationId:
+//             conversation.id,
+
+//           afterSequence:
+//             IMAGE_INSERT_AFTER_SENTENCE,
+//         })
+//           .then((image) => {
+//             generatedImage =
+//               image || null;
+
+//             return generatedImage;
+//           })
+//           .catch((error) => {
+//             console.error(
+//               "[TutorStream] Image generation task failed:",
+//               error
+//             );
+
+//             generatedImage =
+//               null;
+
+//             return null;
+//           });
+//     }
+
+//     /*
+//     ==========================================
+//     SEND IMAGE
+//     ==========================================
+//     */
+
+//     function sendImage() {
+//       if (
+//         imageDelivered ||
+//         !generatedImage
+//       ) {
+//         return;
+//       }
+
+//       res.write(
+//         `data: ${JSON.stringify({
+//           type: "image",
+
+//           image:
+//             generatedImage,
+
+//           afterSequence:
+//             generatedImage.afterSequence ??
+//             IMAGE_INSERT_AFTER_SENTENCE,
+//         })}\n\n`
+//       );
+
+//       if (res.flush) {
+//         res.flush();
+//       }
+
+//       imageDelivered = true;
+//     }
+
+//     /*
+//     ==========================================
+//     SEND ORDERED SENTENCES
+//     ==========================================
+    
+//     IMPORTANT FIX:
+
+//     We no longer delete the sentence from
+//     sentenceResults.
+
+//     Instead, we only move the delivery
+//     pointer forward.
+
+//     This means completed sentence data
+//     remains available for persistence.
+//     */
+
+//     async function sendOrderedSentences() {
+//       while (true) {
+//         const result =
+//           sentenceResults.get(
+//             nextSequenceToSend
+//           );
+
+//         /*
+//         No next sentence available yet.
+//         */
+
+//         if (!result) {
+//           break;
+//         }
+
+//         /*
+//         ======================================
+//         IMAGE BARRIER
+//         ======================================
+
+//         S1
+//         S2
+//         IMAGE
+//         S3
+//         S4
+//         ======================================
+//         */
+
+//         if (
+//           !imageDelivered &&
+//           nextSequenceToSend >
+//             IMAGE_INSERT_AFTER_SENTENCE &&
+//           imageGenerationStarted
+//         ) {
+//           if (imageGenerationTask) {
+//             await imageGenerationTask;
+//           }
+
+//           sendImage();
+//         }
+
+//         /*
+//         ======================================
+//         SEND SENTENCE
+//         ======================================
+//         */
+
+//         res.write(
+//           `data: ${JSON.stringify({
+//             type: "sentence",
+
+//             sequence:
+//               result.sequence,
+
+//             text:
+//               result.text,
+
+//             audio:
+//               result.audio,
+
+//             audioMimeType:
+//               "audio/mpeg",
+//           })}\n\n`
+//         );
+
+//         if (res.flush) {
+//           res.flush();
+//         }
+
+//         /*
+//         ======================================
+//         IMPORTANT
+
+//         DO NOT DELETE:
+
+//         sentenceResults.delete(...)
+
+//         We only advance the pointer.
+//         ======================================
+//         */
+
+//         nextSequenceToSend++;
+//       }
+//     }
+
+//     /*
+//     ==========================================
+//     PROCESS ONE SENTENCE
+//     ==========================================
+//     */
 
 //     async function processSentence(
 //       sentence,
 //       sequence
 //     ) {
 //       try {
+//         /*
+//         ======================================
+//         GENERATE TTS
+//         ======================================
+//         */
+
 //         const speech =
 //           await generateTutorSpeech({
-//             text: sentence,
-//             gender: studentGender,
-//             voice: "default",
+//             text:
+//               sentence,
+
+//             gender:
+//               studentGender,
+
+//             voice:
+//               "default",
+
 //             speed: 1,
 //           });
 
 //         /*
-//         ========================================
+//         ======================================
 //         STORE AUDIO FOR REPLAY
-//         ========================================
+//         ======================================
 //         */
 
 //         if (
@@ -1504,7 +2014,8 @@ res.end();
 //                 audioSegments.push({
 //                   sequence,
 
-//                   text: sentence,
+//                   text:
+//                     sentence,
 
 //                   url:
 //                     uploaded.url,
@@ -1518,7 +2029,6 @@ res.end();
 //                 });
 //               })
 //               .catch((error) => {
-
 //                 console.error(
 //                   `[TutorStream] Failed to store audio segment ${sequence}:`,
 //                   error
@@ -1531,137 +2041,120 @@ res.end();
 //         }
 
 //         /*
-//         ========================================
-//         PREPARE LIVE AUDIO
-//         ========================================
+//         ======================================
+//         BUILD SENTENCE RESULT
+//         ======================================
 //         */
 
-//         pendingSentences.set(
+//         const result = {
 //           sequence,
-//           {
-//             sequence,
 
-//             text: sentence,
+//           text:
+//             sentence,
 
-//             audio:
-//               speech?.audioBuffer
-//                 ? speech.audioBuffer.toString(
-//                     "base64"
-//                   )
-//                 : null,
-//           }
+//           audio:
+//             speech?.audioBuffer
+//               ? speech.audioBuffer.toString(
+//                   "base64"
+//                 )
+//               : null,
+//         };
+
+//         /*
+//         ======================================
+//         STORE IN DELIVERY QUEUE
+//         ======================================
+//         */
+
+//         sentenceResults.set(
+//           sequence,
+//           result
 //         );
 
 //         /*
-//         ========================================
-//         SEND COMPLETED SENTENCES IN ORDER
-//         ========================================
+//         ======================================
+//         IMPORTANT FIX
+
+//         Keep a permanent copy for
+//         contentBlocks.
+
+//         This is NOT deleted when the
+//         sentence is streamed.
+//         ======================================
 //         */
 
-//         while (
-//           pendingSentences.has(
-//             nextSequenceToSend
-//           )
-//         ) {
-//           const result =
-//             pendingSentences.get(
-//               nextSequenceToSend
-//             );
+//         completedSentences.push(
+//           {
+//             sequence,
 
-//           pendingSentences.delete(
-//             nextSequenceToSend
-//           );
-
-//           res.write(
-//             `data: ${JSON.stringify({
-//               type: "sentence",
-
-//               sequence:
-//                 result.sequence,
-
-//               text:
-//                 result.text,
-
-//               audio:
-//                 result.audio,
-
-//               audioMimeType:
-//                 "audio/mpeg",
-//             })}\n\n`
-//           );
-
-//           if (res.flush) {
-//             res.flush();
+//             text:
+//               sentence,
 //           }
-
-//           nextSequenceToSend++;
-//         }
-        
-
+//         );
 //       } catch (error) {
 //         console.error(
 //           `[TutorStream] TTS failed for sentence ${sequence}:`,
 //           error
 //         );
 
-//         pendingSentences.set(
+//         /*
+//         ======================================
+//         TTS FAILURE
+
+//         The text must still be streamed
+//         and persisted.
+//         ======================================
+//         */
+
+//         const result = {
 //           sequence,
+
+//           text:
+//             sentence,
+
+//           audio:
+//             null,
+//         };
+
+//         sentenceResults.set(
+//           sequence,
+//           result
+//         );
+
+//         /*
+//         Keep text even if TTS failed.
+//         */
+
+//         completedSentences.push(
 //           {
 //             sequence,
 
-//             text: sentence,
-
-//             audio: null,
+//             text:
+//               sentence,
 //           }
 //         );
-
-//         while (
-//           pendingSentences.has(
-//             nextSequenceToSend
-//           )
-//         ) {
-//           const result =
-//             pendingSentences.get(
-//               nextSequenceToSend
-//             );
-
-//           pendingSentences.delete(
-//             nextSequenceToSend
-//           );
-
-//           res.write(
-//             `data: ${JSON.stringify({
-//               type: "sentence",
-
-//               sequence:
-//                 result.sequence,
-
-//               text:
-//                 result.text,
-
-//               audio:
-//                 result.audio,
-
-//               audioMimeType:
-//                 "audio/mpeg",
-//             })}\n\n`
-//           );
-
-//           if (res.flush) {
-//             res.flush();
-//           }
-
-//           nextSequenceToSend++;
-//         }
 //       }
 //     }
 
+//     /*
+//     ==========================================
+//     READ GEMINI STREAM
+//     ==========================================
+//     */
+
 //     for await (const chunk of stream) {
-//       const text = chunk.text;
+//       const text =
+//         chunk.text;
 
 //       if (!text) {
 //         continue;
 //       }
+
+//       /*
+//       ========================================
+//       ACCUMULATE COMPLETE RESPONSE
+//       ========================================
+//       */
 
 //       fullResponse += text;
 
@@ -1670,27 +2163,53 @@ res.end();
 //       const {
 //         sentences,
 //         remainder,
-//       } = extractCompleteSentences(
-//         sentenceBuffer
-//       );
+//       } =
+//         extractCompleteSentences(
+//           sentenceBuffer
+//         );
 
-//       sentenceBuffer = remainder;
+//       sentenceBuffer =
+//         remainder;
 
 //       /*
 //       ========================================
-//       START TTS IMMEDIATELY
+//       PROCESS COMPLETE SENTENCES
 //       ========================================
 //       */
 
 //       for (const sentence of sentences) {
 //         sentenceSequence++;
 
-//         ttsTasks.push(
+//         const currentSequence =
+//           sentenceSequence;
+
+//         /*
+//         ======================================
+//         START IMAGE AFTER SENTENCE 2
+//         ======================================
+//         */
+
+//         if (
+//           !imageGenerationStarted &&
+//           currentSequence >=
+//             IMAGE_INSERT_AFTER_SENTENCE
+//         ) {
+//           startImageGeneration();
+//         }
+
+//         /*
+//         ======================================
+//         START TTS
+//         ======================================
+//         */
+
+//         const task =
 //           processSentence(
 //             sentence,
-//             sentenceSequence
-//           )
-//         );
+//             currentSequence
+//           );
+
+//         ttsTasks.push(task);
 //       }
 //     }
 
@@ -1706,12 +2225,28 @@ res.end();
 //     if (remainingText) {
 //       sentenceSequence++;
 
-//       ttsTasks.push(
+//       const currentSequence =
+//         sentenceSequence;
+
+//       /*
+//       ========================================
+//       SHORT RESPONSE IMAGE
+//       ========================================
+//       */
+
+//       if (
+//         !imageGenerationStarted
+//       ) {
+//         startImageGeneration();
+//       }
+
+//       const task =
 //         processSentence(
 //           remainingText,
-//           sentenceSequence
-//         )
-//       );
+//           currentSequence
+//         );
+
+//       ttsTasks.push(task);
 //     }
 
 //     /*
@@ -1720,48 +2255,174 @@ res.end();
 //     ==========================================
 //     */
 
-//     await Promise.all(ttsTasks);
+//     await Promise.all(
+//       ttsTasks
+//     );
+
+//     /*
+//     ==========================================
+//     WAIT FOR IMAGE
+//     ==========================================
+//     */
+
+//     if (imageGenerationTask) {
+//       await imageGenerationTask;
+//     }
+
+//     /*
+//     ==========================================
+//     STREAM ALL SENTENCES IN ORDER
+//     ==========================================
+//     */
+
+//     await sendOrderedSentences();
+
+//     /*
+//     ==========================================
+//     FINAL IMAGE FALLBACK
+//     ==========================================
+
+//     If there is an image and there was
+//     no sentence after the insertion point,
+//     send the image at the end.
+
+//     Example:
+
+//     S1
+//     S2
+//     IMAGE
+//     ==========================================
+//     */
+
+//     if (
+//       generatedImage &&
+//       !imageDelivered
+//     ) {
+//       sendImage();
+//     }
+
+//     /*
+//     ==========================================
+//     WAIT FOR AUDIO STORAGE
+//     ==========================================
+//     */
 
 //     await Promise.allSettled(
 //       audioSegmentTasks
 //     );
 
+//     /*
+//     ==========================================
+//     SORT AUDIO SEGMENTS
+//     ==========================================
+//     */
+
 //     audioSegments.sort(
 //       (a, b) =>
-//         a.sequence - b.sequence
+//         a.sequence -
+//         b.sequence
 //     );
 
 //     /*
 //     ==========================================
-//     GENERATE OPTIONAL TUTOR IMAGE
+//     BUILD PERSISTENT CONTENT BLOCKS
+//     ==========================================
+
+//     IMPORTANT:
+
+//     We use completedSentences here,
+//     NOT sentenceResults.
+
+//     completedSentences survives the
+//     streaming delivery process.
+
+//     Therefore the database receives:
+
+//     TEXT 1
+//     TEXT 2
+//     IMAGE
+//     TEXT 3
+//     TEXT 4
+//     ...
 //     ==========================================
 //     */
 
-//     let generatedImage = null;
+//     const contentBlocks = [];
 
-//     try {
-//       generatedImage =
-//         await createTutorImage({
-//           studentMessage: message,
+//     /*
+//     ==========================================
+//     TEXT BLOCKS
+//     ==========================================
+//     */
 
-//           tutorResponse:
-//             fullResponse,
+//     for (
+//       const result of completedSentences
+//     ) {
+//       contentBlocks.push({
+//         type:
+//           "text",
 
-//           studentId:
-//             student.id,
+//         sequence:
+//           result.sequence,
 
-//           conversationId:
-//             conversation.id,
-//         });
-//     } catch (imageError) {
-//       console.error(
-//         "[TutorStream] Tutor image generation failed:",
-//         imageError
-//       );
-
-//       generatedImage = null;
+//         text:
+//           result.text,
+//       });
 //     }
 
+//     /*
+//     ==========================================
+//     IMAGE BLOCK
+//     ==========================================
+//     */
+
+//     if (generatedImage) {
+//       contentBlocks.push({
+//         type:
+//           "image",
+
+//         afterSequence:
+//           generatedImage.afterSequence ??
+//           IMAGE_INSERT_AFTER_SENTENCE,
+
+//         image:
+//           generatedImage,
+//       });
+//     }
+
+//     /*
+//     ==========================================
+//     SORT CONTENT BLOCKS
+//     ==========================================
+
+//     Example result:
+
+//     sequence 1
+//     sequence 2
+//     image after sequence 2
+//     sequence 3
+//     sequence 4
+//     ==========================================
+//     */
+
+//     contentBlocks.sort(
+//       (a, b) => {
+//         const orderA =
+//           a.type === "text"
+//             ? a.sequence
+//             : a.afterSequence + 0.5;
+
+//         const orderB =
+//           b.type === "text"
+//             ? b.sequence
+//             : b.afterSequence + 0.5;
+
+//         return (
+//           orderA -
+//           orderB
+//         );
+//       }
+//     );
 
 //     /*
 //     ==========================================
@@ -1770,43 +2431,61 @@ res.end();
 //     */
 
 //     await saveMessage({
-//       conversationId: conversation.id,
+//       conversationId:
+//         conversation.id,
 
-//       role: "assistant",
+//       role:
+//         "assistant",
 
-//       content: fullResponse,
+//       content:
+//         fullResponse,
 
-//       images: generatedImage
-//         ? [generatedImage]
-//         : undefined,
+//       /*
+//       ======================================
+//       NEW PERSISTENT CONTENT BLOCKS
+//       ======================================
+//       */
+
+//       contentBlocks,
+
+//       /*
+//       ======================================
+//       IMAGE COLLECTION
+//       ======================================
+//       */
+
+//       images:
+//         generatedImage
+//           ? [generatedImage]
+//           : undefined,
+
+//       /*
+//       ======================================
+//       AUDIO COLLECTION
+//       ======================================
+//       */
 
 //       audioSegments:
 //         audioSegments.length > 0
 //           ? audioSegments
 //           : undefined,
 //     });
-    
 
-//     if (generatedImage) {
-//       res.write(
-//         `data: ${JSON.stringify({
-//           type: "image",
-//           image: generatedImage,
-//         })}\n\n`
-//       );
-
-//       if (res.flush) {
-//         res.flush();
-//       }
-//     }
+//     /*
+//     ==========================================
+//     UPDATE CONVERSATION
+//     ==========================================
+//     */
 
 //     await db.tutorConversation.update({
 //       where: {
-//         id: conversation.id,
+//         id:
+//           conversation.id,
 //       },
 
 //       data: {
-//         updatedAt: new Date(),
+//         updatedAt:
+//           new Date(),
 //       },
 //     });
 
@@ -1836,7 +2515,9 @@ res.end();
 
 //     Promise.allSettled([
 //       updateTutorMemory({
-//         studentId: student.id,
+//         studentId:
+//           student.id,
+
 //         conversationId:
 //           conversation.id,
 //       }),
@@ -1864,12 +2545,17 @@ res.end();
 //         student.id
 //       ),
 //     ]).catch(console.error);
-
 //   } catch (error) {
 //     console.error(
 //       "AI Tutor Stream Error:",
 //       error
 //     );
+
+//     /*
+//     ==========================================
+//     ERROR BEFORE SSE STARTED
+//     ==========================================
+//     */
 
 //     if (!res.headersSent) {
 //       return res.status(500).json({
@@ -1879,11 +2565,18 @@ res.end();
 //       });
 //     }
 
+//     /*
+//     ==========================================
+//     ERROR AFTER SSE STARTED
+//     ==========================================
+//     */
+
 //     try {
 //       res.write(
 //         `data: ${JSON.stringify({
 //           type: "error",
-//           message: "Tutor failed",
+//           message:
+//             "Tutor failed",
 //         })}\n\n`
 //       );
 //     } catch {}
@@ -1893,6 +2586,7 @@ res.end();
 //     } catch {}
 //   }
 // }
+
 
 export async function getConversations(
   req,

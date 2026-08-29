@@ -17,6 +17,7 @@ export async function saveMessage({
   conversationId,
   role,
   content,
+  contentBlocks,
   images,
   audioSegments,
 }) {
@@ -24,17 +25,21 @@ export async function saveMessage({
     await db.tutorMessage.create({
       data: {
         conversationId,
-
         role,
-
         content,
 
-        images: images
-          ? images
-          : undefined,
+        contentBlocks:
+          contentBlocks?.length > 0
+            ? contentBlocks
+            : undefined,
+
+        images:
+          images?.length > 0
+            ? images
+            : undefined,
 
         audioSegments:
-          audioSegments
+          audioSegments?.length > 0
             ? audioSegments
             : undefined,
       },
@@ -52,6 +57,46 @@ export async function saveMessage({
 
   return message;
 }
+
+// export async function saveMessage({
+//   conversationId,
+//   role,
+//   content,
+//   images,
+//   audioSegments,
+// }) {
+//   const message =
+//     await db.tutorMessage.create({
+//       data: {
+//         conversationId,
+
+//         role,
+
+//         content,
+
+//         images: images
+//           ? images
+//           : undefined,
+
+//         audioSegments:
+//           audioSegments
+//             ? audioSegments
+//             : undefined,
+//       },
+//     });
+
+//   await db.tutorConversation.update({
+//     where: {
+//       id: conversationId,
+//     },
+
+//     data: {
+//       updatedAt: new Date(),
+//     },
+//   });
+
+//   return message;
+// }
 
 export async function getConversation(
   conversationId
