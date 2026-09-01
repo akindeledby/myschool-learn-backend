@@ -3,26 +3,180 @@ import { s3 } from "../../lib/aws-s3.js";
 import { callTTSProvider } from "./audio.service.js";
 import { getAudioDurationFromBuffer } from "./get-audio-duration.service.js";
 
-function cleanTextForTTS(text) {
+function normalizeLatexForSpeech(text) {
   if (!text) {
     return "";
   }
 
-  return text
-    .replace(/\*\*(.*?)\*\*/gs, "$1")
+  let result = text;
 
-    .replace(/\*(.*?)\*/gs, "$1")
+  /*
+  ================================================
+  FRACTIONS
+  ================================================
+  */
 
-    .replace(/`([^`]+)`/g, "$1")
+  result = result.replace(
+    /\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g,
+    "$1 divided by $2"
+  );
 
-    .replace(/^#{1,6}\s*/gm, "")
+  /*
+  ================================================
+  SQUARE ROOTS
+  ================================================
+  */
+
+  result = result.replace(
+    /\\sqrt\s*\{([^{}]*)\}/g,
+    "square root of $1"
+  );
+
+  /*
+  ================================================
+  SUPERSCRIPTS
+  ================================================
+  */
+
+  result = result.replace(
+    /\^\{([^{}]*)\}/g,
+    " to the power of $1"
+  );
+
+  result = result.replace(
+    /\^([a-zA-Z0-9])/g,
+    " to the power of $1"
+  );
+
+  /*
+  ================================================
+  SUBSCRIPTS
+  ================================================
+  */
+
+  result = result.replace(
+    /_\{([^{}]*)\}/g,
+    " subscript $1"
+  );
+
+  result = result.replace(
+    /_([a-zA-Z0-9])/g,
+    " subscript $1"
+  );
+
+  /*
+  ================================================
+  COMMON LATEX OPERATORS
+  ================================================
+  */
+
+  result = result
+    .replace(/\\times/g, " times ")
+    .replace(/\\cdot/g, " times ")
+    .replace(/\\div/g, " divided by ")
+    .replace(/\\pm/g, " plus or minus ")
+    .replace(/\\leq/g, " less than or equal to ")
+    .replace(/\\geq/g, " greater than or equal to ")
+    .replace(/\\neq/g, " not equal to ")
+    .replace(/\\approx/g, " approximately ")
+    .replace(/\\lt/g, " less than ")
+    .replace(/\\gt/g, " greater than ")
+    .replace(/\\infty/g, " infinity ");
+
+  /*
+  ================================================
+  COMMON LATEX SYMBOLS
+  ================================================
+  */
+
+  result = result
+    .replace(/\\%/g, " percent ")
+    .replace(/\\=/g, " equals ")
+    .replace(/\\+/g, " plus ")
+    .replace(/\\-/g, " minus ");
+
+  /*
+  ================================================
+  TEXT INSIDE LATEX
+  ================================================
+  */
+
+  result = result.replace(
+    /\\text\s*\{([^{}]*)\}/g,
+    "$1"
+  );
+
+  result = result.replace(
+    /\\mathrm\s*\{([^{}]*)\}/g,
+    "$1"
+  );
+
+  result = result.replace(
+    /\\mathbf\s*\{([^{}]*)\}/g,
+    "$1"
+  );
+
+  /*
+  ================================================
+  REMOVE LATEX MATH DELIMITERS
+  ================================================
+  */
+
+  result = result
+    .replace(/\$\$/g, "")
+    .replace(/\$/g, "")
+    .replace(/\\\(/g, "")
+    .replace(/\\\)/g, "")
+    .replace(/\\\[/g, "")
+    .replace(/\\\]/g, "");
+
+  /*
+  ================================================
+  REMAINING COMMON LATEX COMMANDS
+  ================================================
+  */
+
+  result = result.replace(
+    /\\([a-zA-Z]+)\s*/g,
+    "$1 "
+  );
+
+  /*
+  ================================================
+  CLEAN MARKDOWN
+  ================================================
+  */
+
+  result = result
+    .replace(
+      /\*\*(.*?)\*\*/gs,
+      "$1"
+    )
+
+    .replace(
+      /\*(.*?)\*/gs,
+      "$1"
+    )
+
+    .replace(
+      /`([^`]+)`/g,
+      "$1"
+    )
+
+    .replace(
+      /^#{1,6}\s*/gm,
+      ""
+    )
 
     .replace(
       /\[([^\]]+)\]\([^)]+\)/g,
       "$1"
     )
 
-    .replace(/~~(.*?)~~/gs, "$1")
+    .replace(
+      /~~(.*?)~~/gs,
+      "$1"
+    )
 
     .replace(
       /^\s*[-*+]\s+/gm,
@@ -40,14 +194,41 @@ function cleanTextForTTS(text) {
     )
 
     .replace(/\*/g, "")
-
     .replace(/_/g, "")
+    .replace(/~/g, "");
 
-    .replace(/~/g, "")
+  /*
+  ================================================
+  MATHEMATICAL SYMBOLS
+  ================================================
+  */
 
+  result = result
+    .replace(/×/g, " times ")
+    .replace(/÷/g, " divided by ")
+    .replace(/≤/g, " less than or equal to ")
+    .replace(/≥/g, " greater than or equal to ")
+    .replace(/≠/g, " not equal to ")
+    .replace(/≈/g, " approximately ")
+    .replace(/±/g, " plus or minus ")
+    .replace(/∞/g, " infinity ");
+
+  /*
+  ================================================
+  NORMALIZE WHITESPACE
+  ================================================
+  */
+
+  result = result
     .replace(/\s+/g, " ")
-
     .trim();
+
+  return result;
+}
+
+
+export function cleanTextForTTS(text) {
+  return normalizeLatexForSpeech(text);
 }
 
 /*

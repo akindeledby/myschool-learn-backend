@@ -1,8 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
+import { ai } from "../../../lib/gemini.js";
+// import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY!,
-});
+// const ai = new GoogleGenAI({
+//   apiKey: process.env.GEMINI_API_KEY!,
+// });
 
 interface GenerateExplanationParams {
   prompt: string;

@@ -1,11 +1,13 @@
 import express from "express";
+import multer from "multer";
 
 import {
   getConversations,
   getConversationById,
   deleteConversationById,
   chatWithTutorStream,
-  startTutorLesson
+  startTutorLesson,
+  transcribeTutorAudioController
 } from "../controllers/aiTutor.controller.js";
 
 import {
@@ -45,5 +47,22 @@ router.delete(
   deleteConversationById
 );
 
+const upload =
+  multer({
+    dest: "uploads/audio-transcribe/",
+    limits: {
+      fileSize:
+        10 * 1024 * 1024,
+    },
+  });
+
+router.post(
+  "/audio-transcribe",
+  authMiddleWare(),
+  upload.single("audio"),
+  transcribeTutorAudioController
+);
 
 export default router;
+
+

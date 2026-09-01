@@ -1,7 +1,7 @@
 import { db } from "../../lib/db.js";
 
 import { buildAssignmentPrompt } from "../services/assignment/assignmentPrompt.ts";
-import { generateAssignmentExplanation } from "../services/assignment/geminiService.ts";
+import { generateAssignmentExplanation } from "../services/assignment/assignment.service.ts";
 import { resolveStudent } from "../services/elevenLabs/studentResolver.service.js";
 
 import { checkSubscriptionAccess } from "../services/subscription/subscription.access.js";

@@ -7,7 +7,7 @@ import { authMiddleWare } from "../middleware/auth.middleware.js";
 const router = express.Router();
 
 const upload = multer({
-  dest: "uploads/",
+  dest: "uploads/document-file/",
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = [
       "application/pdf",

@@ -515,9 +515,9 @@ export async function updateTutorMemory({
   //   "\n[TutorMemory] Gemini response text:"
   // );
 
-  console.log(
-    rawResponse
-  );
+  // console.log(
+  //   rawResponse
+  // );
 
   // console.log(
   //   "\n[TutorMemory] End Gemini response.\n"
@@ -545,14 +545,14 @@ export async function updateTutorMemory({
     //   "[TutorMemory] Gemini JSON parsed successfully."
     // );
 
-    console.log(
-      "[TutorMemory] Parsed Gemini data:",
-      JSON.stringify(
-        rawData,
-        null,
-        2
-      )
-    );
+    // console.log(
+    //   "[TutorMemory] Parsed Gemini data:",
+    //   JSON.stringify(
+    //     rawData,
+    //     null,
+    //     2
+    //   )
+    // );
   } catch (error) {
     console.error(
       "[TutorMemory] Failed to parse Gemini response:",
@@ -611,13 +611,13 @@ export async function updateTutorMemory({
   //   "[TutorMemory] Raw memories:"
   // );
 
-  console.log(
-    JSON.stringify(
-      rawMemories,
-      null,
-      2
-    )
-  );
+  // console.log(
+  //   JSON.stringify(
+  //     rawMemories,
+  //     null,
+  //     2
+  //   )
+  // );
 
   /*
   ============================================================

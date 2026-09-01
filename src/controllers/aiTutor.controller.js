@@ -23,6 +23,9 @@ import { streamTutorLesson } from "../services/aiTutor/streamTutorLesson.service
 import { verifyTutorLessonSession } from "../services/aiTutor/lesson/verifyTutorLessonSession.service.js";
 import { streamTutorConversationResponse } from "../services/aiTutor/streamTutorConversationResponse.service.js";
 
+import {
+  transcribeTutorAudio,
+} from "../services/aiTutor/transcribeTutorAudio.service.js";
 
 
 export async function chatWithTutorStream(req, res) {
@@ -1009,24 +1012,30 @@ export async function startTutorLesson(req, res) {
       });
     }
 
+        /*
+    ============================================================
+    SUBSCRIPTION ACCESS
+    ============================================================
+    */
+
+    const access =
+      await checkSubscriptionAccess({
+        userId,
+
+        feature:
+          SUBSCRIPTION_FEATURES.AI_CHAT,
+      });
+
+    if (!access.success) {
+      return res.status(403).json(access);
+    }
+
     // console.log("Student is", student)
 
     // console.log(
     //   "[START LESSON] Student:",
     //   student.id
     // );
-
-    const access =
-      await checkSubscriptionAccess({
-        userId,
-        feature:
-          SUBSCRIPTION_FEATURES.AI_CHAT,
-      });
-
-
-    if (!access?.success) {
-      return res.status(403).json(access);
-    }
 
     const {
       subjectId,
@@ -1258,3 +1267,179 @@ export async function startTutorLesson(req, res) {
     });
   }
 }
+
+
+
+export async function transcribeTutorAudioController(req, res) {
+  try {
+    const userId = req.user?.userId;
+    const { studentId } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication is required.",
+      });
+    }
+
+    const student =
+      await resolveStudent({
+        userId,
+        studentId,
+      });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+        /*
+    ============================================================
+    SUBSCRIPTION ACCESS
+    ============================================================
+    */
+
+    const access =
+      await checkSubscriptionAccess({
+        userId,
+
+        feature:
+          SUBSCRIPTION_FEATURES.AI_CHAT,
+      });
+
+    if (!access.success) {
+      return res.status(403).json(access);
+    }
+
+    const audioFile = req.file;
+
+    if (!audioFile) {
+      return res.status(400).json({
+        success: false,
+        message: "Audio file is required.",
+      });
+    }
+
+    if (!audioFile.path) {
+      return res.status(400).json({
+        success: false,
+        message: "The uploaded audio file could not be processed.",
+      });
+    }
+
+    if (!audioFile.mimetype?.startsWith("audio/")) {
+      return res.status(400).json({
+        success: false,
+        message: "Only audio files are allowed.",
+      });
+    }
+
+    console.log("[TUTOR TRANSCRIPTION] Request received:", {
+      student: student.id,
+      originalName: audioFile.originalname,
+      mimeType: audioFile.mimetype,
+      size: audioFile.size,
+    });
+
+    const text = await transcribeTutorAudio({
+      filePath: audioFile.path,
+      mimeType: audioFile.mimetype,
+    });
+
+    console.log("[TUTOR TRANSCRIPTION] Completed successfully.");
+
+    return res.status(200).json({
+      success: true,
+      text,
+    });
+  } catch (error) {
+    console.error(
+      "[TUTOR TRANSCRIPTION] ERROR:",
+      error
+    );
+
+    if (res.headersSent) {
+      return;
+    }
+
+    const statusCode =
+      Number.isInteger(error?.statusCode)
+        ? error.statusCode
+        : 500;
+
+    return res.status(statusCode).json({
+      success: false,
+      message:
+        error?.message ||
+        "Unable to transcribe the audio.",
+    });
+  }
+}
+
+// export async function transcribeTutorAudioController(
+//   req,
+//   res
+// ) {
+//   try {
+//     const userId =
+//       req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(401).json({
+//         success: false,
+//         message:
+//           "Authentication is required.",
+//       });
+//     }
+
+//     const audioFile =
+//       req.file;
+
+//     if (!audioFile) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "Audio file is required.",
+//       });
+//     }
+
+//     const text =
+//       await transcribeTutorAudio({
+//         filePath:
+//           audioFile.path,
+
+//         mimeType:
+//           audioFile.mimetype,
+//       });
+
+//     return res.status(200).json({
+//       success: true,
+//       text,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "[TUTOR TRANSCRIPTION] ERROR:",
+//       error
+//     );
+
+//     if (res.headersSent) {
+//       return;
+//     }
+
+//     const statusCode =
+//       Number.isInteger(
+//         error?.statusCode
+//       )
+//         ? error.statusCode
+//         : 500;
+
+//     return res.status(statusCode).json({
+//       success: false,
+//       message:
+//         error?.message ||
+//         "Unable to transcribe the audio.",
+//     });
+//   }
+// }

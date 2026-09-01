@@ -44,10 +44,6 @@ export async function uploadPDF(req, res) {
       data: schemeOfWorkData,
     });
 
-    // console.log(schemeOfWork);
-
-    // console.log("Adding SchemeOfWork job to queue");
-
     await schemeOfWorkQueue.add(
       "process-schemeOfWork",
       {
@@ -64,8 +60,6 @@ export async function uploadPDF(req, res) {
         },
       }
     );
-
-    // console.log("SchemeOfWork job added succesfully", schemeOfWork);
 
     return res.json({
       success: true,

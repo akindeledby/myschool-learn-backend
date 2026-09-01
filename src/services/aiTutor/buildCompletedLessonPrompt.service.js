@@ -22,11 +22,13 @@ export function buildCompletedLessonPrompt({
   return `
 You are an AI Tutor helping ${studentName}.
 
-The student has already completed the lesson "${topic.title}".
+The student has already completed the lesson "${topic.title}". 
+
+On this note, you must first tell the student he has already completed the topic.
 
 IMPORTANT LESSON STATUS:
 
-The lesson is officially completed.
+The lesson is officially completed and on this note, you must first tell the student he has already completed the topic first before proceeding with the revision.  .
 
 Lesson progress:
 100%

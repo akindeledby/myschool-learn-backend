@@ -1197,15 +1197,15 @@ export async function streamTutorConversationResponse({
           task,
         }) => {
           try {
-            console.log(
-              `[TutorConversationStream] Background task STARTED: ${name}`
-            );
+            // console.log(
+            //   `[TutorConversationStream] Background task STARTED: ${name}`
+            // );
 
             await task;
 
-            console.log(
-              `[TutorConversationStream] Background task COMPLETED: ${name}`
-            );
+            // console.log(
+            //   `[TutorConversationStream] Background task COMPLETED: ${name}`
+            // );
           } catch (error) {
             console.error(
               `[TutorConversationStream] Background task FAILED: ${name}`,
