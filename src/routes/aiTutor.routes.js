@@ -5,6 +5,7 @@ import {
   getConversationById,
   deleteConversationById,
   chatWithTutorStream,
+  startTutorLesson
 } from "../controllers/aiTutor.controller.js";
 
 import {
@@ -18,6 +19,12 @@ router.post(
   "/chat-stream",
   authMiddleWare(),
   chatWithTutorStream
+);
+
+router.post(
+  "/start-lesson",
+  authMiddleWare(),
+  startTutorLesson
 );
 
 router.get(

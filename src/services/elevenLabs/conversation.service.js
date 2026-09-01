@@ -15,36 +15,45 @@ export async function createConversation({
 
 export async function saveMessage({
   conversationId,
+  lessonSessionId = null,
   role,
   content,
   contentBlocks,
   images,
   audioSegments,
 }) {
-  const message =
-    await db.tutorMessage.create({
-      data: {
-        conversationId,
-        role,
-        content,
+  const message = await db.tutorMessage.create({
+    data: {
+      conversationId,
 
-        contentBlocks:
-          contentBlocks?.length > 0
-            ? contentBlocks
-            : undefined,
+      lessonSessionId,
 
-        images:
-          images?.length > 0
-            ? images
-            : undefined,
+      role,
 
-        audioSegments:
-          audioSegments?.length > 0
-            ? audioSegments
-            : undefined,
-      },
-    });
+      content,
 
+      ...(contentBlocks !== undefined && {
+        contentBlocks,
+      }),
+
+      ...(images !== undefined && {
+        images,
+      }),
+
+      ...(audioSegments !== undefined && {
+        audioSegments,
+      }),
+    },
+  });
+
+  /*
+   * Keep the conversation's updatedAt timestamp current.
+   *
+   * This is important for both:
+   *
+   * 1. Normal Tutor Chat
+   * 2. Curriculum based Tutor Lessons
+   */
   await db.tutorConversation.update({
     where: {
       id: conversationId,
@@ -62,6 +71,7 @@ export async function saveMessage({
 //   conversationId,
 //   role,
 //   content,
+//   contentBlocks,
 //   images,
 //   audioSegments,
 // }) {
@@ -69,17 +79,21 @@ export async function saveMessage({
 //     await db.tutorMessage.create({
 //       data: {
 //         conversationId,
-
 //         role,
-
 //         content,
 
-//         images: images
-//           ? images
-//           : undefined,
+//         contentBlocks:
+//           contentBlocks?.length > 0
+//             ? contentBlocks
+//             : undefined,
+
+//         images:
+//           images?.length > 0
+//             ? images
+//             : undefined,
 
 //         audioSegments:
-//           audioSegments
+//           audioSegments?.length > 0
 //             ? audioSegments
 //             : undefined,
 //       },
@@ -97,6 +111,7 @@ export async function saveMessage({
 
 //   return message;
 // }
+
 
 export async function getConversation(
   conversationId

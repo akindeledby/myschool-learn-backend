@@ -155,9 +155,10 @@ model Student {
   schoolId                    String?
   createdAt                   DateTime                 @default(now())
   updatedAt                   DateTime                 @updatedAt
+  tutorMemories               TutorMemory[]
   dailyChallengeProgresses    DailyChallengeProgress[]
   millionaireAttempts         MillionaireAttempt[]
-  progresses                  Progress[]
+  lessonprogresses                  StudentLessonProgress[]
   quizAttempts                QuizAttempt[]
   speedChallengeAttempts      SpeedChallengeAttempt[]
   account                     Account?                 @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -171,9 +172,10 @@ model Student {
   subjectRankings             SubjectRanking[]
   topicAnalytics              TopicAnalytics[]
   tutorConversations          TutorConversation[]
+  tutorLessonProgresses       TutorLessonProgress[]
+  tutorLessonSessions         TutorLessonSession[]
   tutorLearningInsights       TutorLearningInsight?
   tutorLearningProfiles       TutorLearningProfile?
-  tutorMemories               TutorMemory[]
   tutorPreferences            TutorPreference?
   tutorSessionSummaries       TutorSessionSummary[]
   tutorTopicProgresses        TutorTopicProgress[]
@@ -326,35 +328,61 @@ model Term {
 }
 
 model Topic {
-  id                String                @id @default(uuid())
-  week              Int?
-  title             String
-  status            LessonStatus          @default(PENDING)
-  currentStage      String?
-  renderId          String?
-  renderBucket      String?
-  renderStatus      String?
-  renderProgress    Float?                @default(0)
-  renderedVideoUrl  String?
-  mediaConvertJobId String?
-  hlsUrl            String?
-  progress          Int                   @default(0)
-  lessonContents    String[]
-  lessonPlan        Json?
-  generatedScenes   Json?
-  schemeOfWorkId    String
-  classId           String
-  subjectId         String
-  termId            String
-  createdAt         DateTime              @default(now())
-  progresses        Progress[]
-  quizzes           Quiz[]
-  class             Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
-  schemeOfWork      SchemeOfWork          @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
-  subject           Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  term              Term                  @relation(fields: [termId], references: [id], onDelete: Cascade)
-  analytics         TopicAnalytics[]
-  unlockedAccounts  UnlockedVideoLesson[]
+  id                        String                @id @default(uuid())
+  week                      Int?
+  title                     String
+  status                    LessonStatus          @default(PENDING)
+  currentStage              String?
+  renderId                  String?
+  renderBucket              String?
+  renderStatus              String?
+  renderProgress            Float?                @default(0)
+  renderedVideoUrl          String?
+  mediaConvertJobId         String?
+  hlsUrl                    String?
+  progress                  Int                   @default(0)
+  lessonContents            String[]
+  lessonPlan                Json?
+  lessonObjectives          TopicObjective[]
+  generatedScenes           Json?
+  schemeOfWorkId            String
+  classId                   String
+  subjectId                 String
+  termId                    String
+  objectiveGenerationStatus TopicObjectiveGenerationStatus @default(NOT_GENERATED)
+  createdAt                 DateTime              @default(now())
+  studentProgresses       StudentLessonProgress[]
+
+  lessonProgresses        TutorLessonProgress[]
+  quizzes                   Quiz[]
+  class                   Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
+  schemeOfWork            SchemeOfWork          @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+  subject                 Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  term                    Term                  @relation(fields: [termId], references: [id], onDelete: Cascade)
+  analytics               TopicAnalytics[]
+  unlockedAccounts        UnlockedVideoLesson[]
+}
+
+
+model TopicObjective {
+  id          String   @id @default(uuid())
+
+  topicId     String
+  title       String
+  description String?
+  order       Int
+
+  source      TopicObjectiveSource @default(AI_GENERATED)
+
+  topic       Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  progress    TutorObjectiveProgress[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([topicId, order])
+  @@index([topicId])
 }
 
 model SubjectRanking {
@@ -389,18 +417,6 @@ model DailyChallengeProgress {
   student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
-model Progress {
-  id        String  @id @default(uuid())
-  studentId String
-  topicId   String
-  completed Boolean @default(false)
-  timeSpent Int?
-
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
-
-  @@unique([studentId, topicId])
-}
 
 model Quiz {
   id        String        @id @default(uuid())
@@ -625,8 +641,15 @@ model TutorConversation {
   id                    String               @id @default(uuid())
   studentId             String
   title                 String?
+
+  mode                  TutorConversationMode @default(GENERAL)
+
+  lessonProgress        TutorLessonProgress?
+  lessonSession         TutorLessonSession?
+
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
+
   student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
   messages              TutorMessage[]
   tutorSessionSummaries TutorSessionSummary?
@@ -634,29 +657,27 @@ model TutorConversation {
   @@index([studentId])
 }
 
+
 model TutorMessage {
-  id             String            @id @default(uuid())
-  conversationId String
-  role           String
-  content        String
-  images         Json?
+  id              String             @id @default(uuid())
+  conversationId  String
+  lessonSessionId String?
+
+  role            String
+  content         String
+
+  images          Json?
   audioSegments   Json?
   contentBlocks   Json?
-  createdAt      DateTime          @default(now())
-  conversation   TutorConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime           @default(now())
+
+  conversation    TutorConversation  @relation( fields: [conversationId], references: [id], onDelete: Cascade)
+
+  lessonSession   TutorLessonSession? @relation(fields: [lessonSessionId], references: [id], onDelete: SetNull)
 
   @@index([conversationId])
-}
-
-model TutorPreference {
-  id        String   @id @default(uuid())
-  studentId String   @unique
-  tutorMode String?
-  voiceId   String?
-  gender    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  @@index([lessonSessionId])
 }
 
 model TutorMemory {
@@ -672,6 +693,18 @@ model TutorMemory {
 
   @@unique([studentId, key])
 }
+
+model TutorPreference {
+  id        String   @id @default(uuid())
+  studentId String   @unique
+  tutorMode String?
+  voiceId   String?
+  gender    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
 
 model TutorSessionSummary {
   id             String            @id @default(uuid())
@@ -718,6 +751,166 @@ model TutorLearningInsight {
   updatedAt         DateTime @updatedAt
   student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
+
+model TutorLessonProgress {
+  id                 String            @id @default(uuid())
+
+  studentId          String
+  topicId            String
+  conversationId     String?           @unique
+
+  status             TutorLessonStatus @default(NOT_STARTED)
+
+  currentObjectiveId String?
+  currentStep        Int               @default(0)
+
+  progressPercent    Float             @default(0)
+
+  startedAt          DateTime?
+  lastAccessedAt     DateTime?
+  completedAt        DateTime?
+
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  student            Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  topic              Topic             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  conversation       TutorConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  objectiveProgress    TutorObjectiveProgress[]
+  sessions           TutorLessonSession[]
+  memory             TutorLessonMemory?
+
+  @@unique([studentId, topicId])
+  @@index([studentId])
+  @@index([topicId])
+}
+
+
+model TutorObjectiveProgress {
+  id              String   @id @default(uuid())
+
+  lessonProgressId String
+  objectiveId      String
+
+  status           TutorObjectiveStatus @default(NOT_STARTED)
+
+  attempts         Int      @default(0)
+  correctAttempts  Int      @default(0)
+
+  masteryScore     Float    @default(0)
+
+  startedAt        DateTime?
+  completedAt      DateTime?
+
+  lessonProgress   TutorLessonProgress @relation(fields: [lessonProgressId], references: [id], onDelete: Cascade)
+  objective        TopicObjective      @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([lessonProgressId, objectiveId])
+  @@index([objectiveId])
+}
+
+
+
+model TutorLessonMemory {
+  id                String   @id @default(uuid())
+
+  lessonProgressId  String   @unique
+
+  summary           String?
+
+  strengths         Json?
+  weaknesses        Json?
+  misconceptions    Json?
+  masteredConcepts  Json?
+  pendingConcepts   Json?
+
+  lastInteractionSummary String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  lessonProgress    TutorLessonProgress @relation(fields: [lessonProgressId], references: [id], onDelete: Cascade)
+}
+
+
+model TutorLessonSession {
+  id                  String   @id @default(uuid())
+
+  studentId           String
+  lessonProgressId    String
+  conversationId      String   @unique
+
+  startedAt           DateTime @default(now())
+  endedAt             DateTime?
+
+  durationSeconds     Int?
+
+  startingObjectiveId String?
+  endingObjectiveId   String?
+
+  startingStep        Int?
+  endingStep          Int?
+
+  createdAt           DateTime @default(now())
+
+  student             Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  lessonProgress      TutorLessonProgress @relation(fields: [lessonProgressId], references: [id], onDelete: Cascade)
+
+  conversation        TutorConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  events              TutorLessonEvent[]
+
+  messages            TutorMessage[]
+
+  @@index([studentId])
+  @@index([lessonProgressId])
+}
+
+
+model TutorLessonEvent {
+  id          String   @id @default(uuid())
+
+  sessionId   String
+
+  type        TutorLessonEventType
+
+  objectiveId String?
+  step        Int?
+
+  data        Json?
+
+  createdAt   DateTime @default(now())
+
+  session     TutorLessonSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([objectiveId])
+}
+
+
+model StudentLessonProgress {
+  id        String  @id @default(uuid())
+  studentId String
+  topicId   String
+  completed Boolean @default(false)
+  timeSpent Int?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, topicId])
+}
+
+
+
+
 
 enum Role {
   SUPERADMIN
@@ -798,4 +991,56 @@ enum PaymentProvider {
 enum ProfileType {
   PARENT
   STUDENT
+}
+
+enum TopicObjectiveSource {
+  AI_GENERATED
+  ADMIN_CREATED
+}
+
+enum TutorLessonStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TutorContentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TutorLessonEventType {
+  LESSON_STARTED
+  OBJECTIVE_STARTED
+  EXPLANATION
+  QUESTION_ASKED
+  ANSWER_RECEIVED
+  CORRECT_ANSWER
+  INCORRECT_ANSWER
+  OBJECTIVE_COMPLETED
+  HINT_GIVEN
+  EXAMPLE_GIVEN
+  LESSON_PAUSED
+  LESSON_RESUMED
+  LESSON_COMPLETED
+}
+
+enum TutorObjectiveStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TopicObjectiveGenerationStatus {
+  NOT_GENERATED
+  GENERATING
+  GENERATED
+  FAILED
+}
+
+enum TutorConversationMode {
+  GENERAL
+  TOPIC_CHAT
+  LESSON
 }

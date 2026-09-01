@@ -1,4 +1,4 @@
-// services/elevenLabs/learningInsights.service.js
+
 
 import { db } from "../../../lib/db.js";
 import { ai } from "../../../lib/gemini.js";
@@ -53,10 +53,6 @@ export async function generateLearningInsights(
         `,
       });
 
-    // const parsed =
-    //   InsightSchema.parse(
-    //     JSON.parse(response.text)
-    //   );
     const parsed = InsightSchema.parse(
       parseGeminiJson(response.text)
     );

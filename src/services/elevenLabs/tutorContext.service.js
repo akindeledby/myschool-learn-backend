@@ -1,16 +1,31 @@
+
 import { db } from "../../../lib/db.js";
 import { buildStudentMemory } from "./buildStudentMemory.service.js";
 
-export async function buildTutorContext(
-  studentId
-) {
-  const memory =
-    await buildStudentMemory(
-      studentId
-    );
 
-  const summaries =
-    await db.tutorSessionSummary.findMany({
+export async function buildTutorContext(studentId) {
+  if (!studentId) {
+    const error = new Error("studentId is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  /*
+   * Load independent pieces of Tutor context concurrently.
+   *
+   * buildStudentMemory() contains the existing conversational
+   * memory logic used by the general Tutor.
+   */
+  const [
+    memory,
+    summaries,
+    topicProgress,
+    learningProfile,
+    learningInsight,
+  ] = await Promise.all([
+    buildStudentMemory(studentId),
+
+    db.tutorSessionSummary.findMany({
       where: {
         studentId,
       },
@@ -20,81 +35,48 @@ export async function buildTutorContext(
       },
 
       take: 5,
-    });
+    }),
 
-  const topicProgress =
-    await db.tutorTopicProgress.findMany({
+    db.tutorTopicProgress.findMany({
       where: {
         studentId,
       },
 
-      orderBy: {
-        masteryScore: "desc",
-      },
+      orderBy: [
+        {
+          masteryScore: "desc",
+        },
+        {
+          lastStudiedAt: "desc",
+        },
+      ],
 
       take: 10,
-    });
+    }),
 
-  const learningProfile =
-    await db.tutorLearningProfile.findUnique({
+    db.tutorLearningProfile.findUnique({
       where: {
         studentId,
       },
-    });
+    }),
 
-  const insights =
-    await db.tutorLearningInsight.findUnique({
+    db.tutorLearningInsight.findUnique({
       where: {
         studentId,
       },
-    });
+    }),
+  ]);
 
-    const recentSessions = summaries;
-
-      const progressSummary =
-        topicProgress.length > 0
-          ? topicProgress
-              .map(
-                (topic) => `
-                  Topic: ${topic.topic}
-                  Subject: ${topic.subject || "Unknown"}
-                  Mastery: ${topic.masteryScore}%
-
-                  Strengths:
-                  ${topic.strengths?.join(", ") || "None"}
-
-                  Weaknesses:
-                  ${topic.weaknesses?.join(", ") || "None"}
-                  `
-              )
-              .join("\n")
-          : "No topic progress available.";
-
-      const learningInsights =
-        insights
-          ? `
-          Strongest Subject:
-          ${insights.strongestSubject || "Unknown"}
-
-          Weakest Subject:
-          ${insights.weakestSubject || "Unknown"}
-
-          Average Mastery:
-          ${insights.averageMastery || 0}%
-
-          Top Strengths:
-          ${insights.topStrengths?.join(", ") || "None"}
-
-          Top Weaknesses:
-          ${insights.topWeaknesses?.join(", ") || "None"}
-          `
-            : "No learning insights available.";
 
   return {
-    memory,
-    learningProfile,
-    topicProgress,
-    learningInsights: insights,
-    recentSessions: summaries,
+    memory: memory || null,
+
+    recentSessions: summaries || [],
+
+    topicProgress: topicProgress || [],
+
+    learningProfile: learningProfile || null,
+
+    learningInsight: learningInsight || null,
   };
 }

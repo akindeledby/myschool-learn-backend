@@ -94,15 +94,15 @@ export async function uploadTutorImage({
   const key =
     `generated-tutor-images/${studentId}/${conversationId}/${fileName}`;
 
-  console.log(
-    "===================================="
-  );
+  // console.log(
+  //   "===================================="
+  // );
 
-  console.log(
-    "Uploading Tutor image to S3:"
-  );
+  // console.log(
+  //   "Uploading Tutor image to S3:"
+  // );
 
-  console.log(key);
+  // console.log(key);
 
   /*
   ========================================
@@ -134,15 +134,15 @@ export async function uploadTutorImage({
   const url =
     `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 
-  console.log(
-    "Tutor image uploaded successfully:"
-  );
+  // console.log(
+  //   "Tutor image uploaded successfully:"
+  // );
 
-  console.log(url);
+  // console.log(url);
 
-  console.log(
-    "===================================="
-  );
+  // console.log(
+  //   "===================================="
+  // );
 
   return {
     url,

@@ -3,12 +3,22 @@ import { ai } from "../../../lib/gemini.js";
 import { TopicSchema } from "./schemas/topic.schema.js";
 import { parseGeminiJson } from "../../utils/parseGeminiJson.js";
 
-
-export async function updateTopicProgress(
+export async function updateTopicProgress({
   conversationId,
-  studentId
-) {
+  studentId,
+  topicId,
+  lessonProgressId,
+  lessonSessionId,
+}) {
   try {
+    if (!conversationId || !studentId) {
+      console.warn(
+        "[updateTopicProgress] Missing conversationId or studentId."
+      );
+
+      return null;
+    }
+
     const messages =
       await db.tutorMessage.findMany({
         where: {
@@ -24,7 +34,10 @@ export async function updateTopicProgress(
     }
 
     const transcript = messages
-      .map((m) => `${m.role}: ${m.content}`)
+      .map(
+        (message) =>
+          `${message.role}: ${message.content}`
+      )
       .join("\n");
 
     const response =
@@ -32,30 +45,30 @@ export async function updateTopicProgress(
         model: "gemini-2.5-flash",
 
         contents: `
-        Analyze this tutoring conversation.
+Analyze this tutoring conversation.
 
-        Return ONLY valid JSON.
+Return ONLY valid JSON.
 
-        Schema:
+Schema:
 
-        {
-          "topic": "",
-          "subject": "",
-          "masteryScore": 0,
-          "strengths": [],
-          "weaknesses": []
-        }
+{
+  "topic": "",
+  "subject": "",
+  "masteryScore": 0,
+  "strengths": [],
+  "weaknesses": []
+}
 
-        Conversation:
+Conversation:
 
-        ${transcript}
+${transcript}
         `,
       });
 
-   const parsed =
-    TopicSchema.parse(
-      parseGeminiJson(response.text)
-    );
+    const parsed =
+      TopicSchema.parse(
+        parseGeminiJson(response.text)
+      );
 
     return await db.tutorTopicProgress.upsert({
       where: {
