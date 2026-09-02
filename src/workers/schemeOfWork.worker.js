@@ -3,7 +3,7 @@ import axios from "axios";
 
 import { db } from "../../lib/db.js";
 import { createRedisConnection } from "../../lib/redis.js";
-import { extractSchemeOfWork } from "../services/gemini.service.js";
+import { extractSchemeOfWork } from "../services/schemeOfWork/extractSchemeOfWork.js";
 import { validateSchemeOfWork } from "../utils/validateSchemeOfWork.js";
 import { saveSchemeOfWork } from "../utils/saveSchemeOfWork.js";
 

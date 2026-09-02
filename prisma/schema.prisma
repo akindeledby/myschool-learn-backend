@@ -114,7 +114,7 @@ model Teacher {
   phone       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  school      School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school      School?  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -131,7 +131,7 @@ model Parent {
   
   userId                      String?   @unique
   schoolId                    String?
-  school                      School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school                      School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   user                        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   students                    Student[]
 }
@@ -155,6 +155,7 @@ model Student {
   schoolId                    String?
   createdAt                   DateTime                 @default(now())
   updatedAt                   DateTime                 @updatedAt
+  lessonContents              LessonNote[]
   tutorMemories               TutorMemory[]
   dailyChallengeProgresses    DailyChallengeProgress[]
   millionaireAttempts         MillionaireAttempt[]
@@ -162,9 +163,9 @@ model Student {
   quizAttempts                QuizAttempt[]
   speedChallengeAttempts      SpeedChallengeAttempt[]
   account                     Account?                 @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  class                       Class?                   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  class                       Class?                   @relation(fields: [classId], references: [id], onDelete: SetNull)
   parent                      Parent?                  @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  school                      School?                  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school                      School?                  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   user                        User?                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   studentAchievements         StudentAchievement[]
   studentProfile              StudentProfile?
@@ -252,6 +253,8 @@ model LessonNote {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   @@index([topicId])
   @@index([studentId])
   @@unique([studentId, topicId])
@@ -264,12 +267,12 @@ model SchemeOfWork {
   noOfPages        Int
   fileLink         String
   processingStatus String    @default("PENDING")
-  uploadedById     String
+  uploadedById     String?
   schoolId         String?
   createdAt        DateTime  @default(now())
   classes          Class[]
-  school           School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  uploadedBy       User      @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  school           School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  uploadedBy       User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   subjects         Subject[]
   terms            Term[]
   topics           Topic[]
@@ -278,13 +281,13 @@ model SchemeOfWork {
 model Subject {
   id                     String                  @id @default(uuid())
   name                   String
-  schemeOfWorkId         String
+  schemeOfWorkId         String?
   createdAt              DateTime                @default(now())
   classSubjects          ClassSubject[]
   millionaireAttempts    MillionaireAttempt[]
   speedChallengeAttempts SpeedChallengeAttempt[]
   studentScores          StudentScore[]
-  schemeOfWork           SchemeOfWork?           @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+  schemeOfWork           SchemeOfWork?           @relation(fields: [schemeOfWorkId], references: [id], onDelete: SetNull)
   subjectRankings        SubjectRanking[]
   terms                  Term[]
   topics                 Topic[]
@@ -293,9 +296,9 @@ model Subject {
 model Class {
   id              String           @id @default(uuid())
   name            String          @unique
-  schemeOfWorkId  String
+  schemeOfWorkId  String?
   createdAt       DateTime         @default(now())
-  SchemeOfWork    SchemeOfWork    @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+  SchemeOfWork    SchemeOfWork?    @relation(fields: [schemeOfWorkId], references: [id], onDelete: SetNull)
   classSubjects   ClassSubject[]
   students        Student[]
   subjectRankings SubjectRanking[]
@@ -316,12 +319,12 @@ model Term {
   id             String       @id @default(uuid())
   name           String
   position       Int?
-  schemeOfWorkId String
+  schemeOfWorkId String?
   classId        String
   subjectId      String
   createdAt      DateTime     @default(now())
   class          Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  schemeOfWork   SchemeOfWork @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+  schemeOfWork   SchemeOfWork? @relation(fields: [schemeOfWorkId], references: [id], onDelete: SetNull)
   subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   studentScores      StudentScore[]
   topics         Topic[]
@@ -345,7 +348,7 @@ model Topic {
   lessonPlan                Json?
   lessonObjectives          TopicObjective[]
   generatedScenes           Json?
-  schemeOfWorkId            String
+  schemeOfWorkId            String?
   classId                   String
   subjectId                 String
   termId                    String
@@ -356,7 +359,7 @@ model Topic {
   lessonProgresses        TutorLessonProgress[]
   quizzes                   Quiz[]
   class                   Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
-  schemeOfWork            SchemeOfWork          @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+  schemeOfWork            SchemeOfWork?          @relation(fields: [schemeOfWorkId], references: [id], onDelete: SetNull)
   subject                 Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   term                    Term                  @relation(fields: [termId], references: [id], onDelete: Cascade)
   analytics               TopicAnalytics[]
@@ -388,13 +391,13 @@ model TopicObjective {
 model SubjectRanking {
   id        String  @id @default(uuid())
   studentId String
-  subjectId String
+  subjectId String?
   xp        Int     @default(0)
   level     Int     @default(1)
   classId   String
   class     Class   @relation(fields: [classId], references: [id])
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id])
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
   @@unique([studentId, subjectId])
 }
@@ -410,10 +413,10 @@ model DailyChallenge {
 
 model DailyChallengeProgress {
   id          String         @id @default(uuid())
-  challengeId String
+  challengeId String?
   studentId   String
   completed   Boolean        @default(false)
-  challenge   DailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  challenge   DailyChallenge? @relation(fields: [challengeId], references: [id], onDelete: SetNull)
   student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
@@ -432,7 +435,7 @@ model Question {
   id                String          @id @default(uuid())
   text              String
   correctAnswer     String
-  explanation       String?
+  explanation       String
   quizId            String
   options           String[]
   createdAt         DateTime        @default(now())
@@ -464,7 +467,7 @@ model StudentAnswer {
 model MillionaireAttempt {
   id           String   @id @default(uuid())
   studentId    String
-  subjectId    String
+  subjectId    String?
   score        Int
   levelReached Int
   correct      Int
@@ -472,13 +475,13 @@ model MillionaireAttempt {
   completed    Boolean
   createdAt    DateTime @default(now())
   student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject      Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 }
 
 model SpeedChallengeAttempt {
   id         String   @id @default(uuid())
   studentId  String
-  subjectId  String
+  subjectId  String?
   score      Int
   correct    Int
   wrong      Int
@@ -488,7 +491,7 @@ model SpeedChallengeAttempt {
   completed  Boolean  @default(true)
   createdAt  DateTime @default(now())
   student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject    Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 }
 
 
@@ -497,7 +500,7 @@ model StudentAchievement {
   achievementId String
   studentId     String
   earnedAt      DateTime              @default(now())
-  achievement   AchievementDefinition @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  achievement   AchievementDefinition @relation(fields: [achievementId], references: [id])
   student       Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, achievementId])
@@ -544,8 +547,8 @@ model TopicAnalytics {
 
 model Subscription {
   id                 String               @id @default(uuid())
-  accountId          String               @unique
-  subscriptionPlanId String
+  accountId          String?               @unique
+  subscriptionPlanId String?
   status             SubscriptionStatus
   duration           SubscriptionDuration
   startsAt           DateTime
@@ -556,8 +559,8 @@ model Subscription {
   createdAt          DateTime             @default(now())
 
   payments           Payment[]
-  account            Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  subscriptionPlan   SubscriptionPlan     @relation(fields: [subscriptionPlanId], references: [id], onDelete: Cascade)
+  account            Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  subscriptionPlan   SubscriptionPlan?     @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
 }
 
 model SubscriptionPlan {
@@ -586,7 +589,7 @@ model SubscriptionPlan {
 
 model Payment {
   id                    String          @id @default(uuid())
-  accountId             String
+  accountId             String?
   subscriptionId        String?
   subscriptionPlanId    String?
   reference             String          @unique
@@ -599,7 +602,7 @@ model Payment {
   paidAt                DateTime?
   createdAt             DateTime        @default(now())
 
-  account               Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account               Account?         @relation(fields: [accountId], references: [id], onDelete: SetNull)
   subscription          Subscription?   @relation(fields: [subscriptionId], references: [id])
   subscriptionPlan      SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
 
@@ -907,9 +910,6 @@ model StudentLessonProgress {
 
   @@unique([studentId, topicId])
 }
-
-
-
 
 
 enum Role {
