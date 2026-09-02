@@ -45,10 +45,7 @@ export async function getClasses(
 }
 
 
-export async function getClassSubjectsVideo(
-  req,
-  res
-) {
+export async function getClassSubjectsVideo(req, res) {
   try {
     const userId = req.user.userId;
     const { studentId } = req.query;
@@ -83,44 +80,43 @@ export async function getClassSubjectsVideo(
       });
     }
 
-    const classSubjects =
-      await db.classSubject.findMany({
-        where: {
-          classId: student.classId,
+    if (!student.classId) {
+      return res.status(404).json({
+        message: "Student has not been assigned to a class",
+        subjects: [],
+      });
+    }
 
-          subject: {
-            topics: {
-              some: {
-                status: "COMPLETED",
-              },
+    const classSubjects = await db.classSubject.findMany({
+      where: {
+        classId: student.classId,
+        subject: {
+          topics: {
+            some: {
+              status: "COMPLETED",
             },
           },
         },
-
-        include: {
-          subject: true,
-        },
-      });
+      },
+      include: {
+        subject: true,
+      },
+    });
 
     if (classSubjects.length === 0) {
       return res.status(404).json({
-        message:
-          "No subjects with completed topics found for this class",
+        message: "No subjects with completed topics found for this class",
+        subjects: [],
       });
     }
 
     const subjects = classSubjects
       .map(({ subject }) => subject)
-      .sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return res.status(200).json(subjects);
   } catch (error) {
-    console.error(
-      "getClassSubjects error:",
-      error
-    );
+    console.error("getClassSubjectsVideo error:", error);
 
     return res.status(500).json({
       message: "Failed to fetch subjects",
@@ -167,6 +163,14 @@ export async function getClassSubjectsTutor(
         message: "Student record not found",
       });
     }
+
+    if (!student.classId) {
+      return res.status(404).json({
+        message: "Student has not been assigned to a class",
+        subjects: [],
+      });
+    }
+
 
     const classSubjects =
       await db.classSubject.findMany({
