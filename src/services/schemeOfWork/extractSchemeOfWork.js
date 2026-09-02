@@ -152,8 +152,7 @@ export async function extractSchemeOfWork(pdfBuffer) {
 
     logGeminiUsage(response);
 
-    const text =
-      response.text().trim();
+    const text = response.text.trim();
 
     if (!text) {
       throw new Error(

@@ -1,7 +1,8 @@
 import express from "express";
 import { authMiddleWare } from "../middleware/auth.middleware.js";
 import { getClasses, 
-    getClassSubjects, 
+    getClassSubjectsVideo,
+    getClassSubjectsTutor, 
     getTopicsBySubject, 
     getVideoLesson, 
     getQuestionsByTopics, 
@@ -16,7 +17,8 @@ import { getClasses,
 const router = express.Router();
 
 router.get("/", getClasses);
-router.get("/subjects", authMiddleWare(), getClassSubjects);
+router.get("/subjects-video", authMiddleWare(), getClassSubjectsVideo);
+router.get("/subjects-tutor", authMiddleWare(), getClassSubjectsTutor);
 router.get("/topics/:subjectId", authMiddleWare(), getTopicsBySubject);
 router.get("/video/:topicId", authMiddleWare(), getVideoLesson);
 router.post("/topics/questions", authMiddleWare(), getQuestionsByTopics);
