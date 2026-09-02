@@ -45,7 +45,7 @@ export async function getClasses(
 }
 
 
-export async function getClassSubjectsTutor(
+export async function getClassSubjectsVideo(
   req,
   res
 ) {
@@ -129,7 +129,7 @@ export async function getClassSubjectsTutor(
 }
 
 
-export async function getClassSubjectsVideo(
+export async function getClassSubjectsTutor(
   req,
   res
 ) {
@@ -304,7 +304,7 @@ export async function getTopicsByTerm(
       await db.topic.findMany({
         where: {
           termId,
-          status: "COMPLETED",
+          // status: "COMPLETED",
         },
 
         select: {

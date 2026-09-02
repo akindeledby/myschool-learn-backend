@@ -815,6 +815,9 @@ export async function setUserRole(req, res) {
                 role: "PARENT",
                 accountId:
                   account.id,
+                phone:
+                  phoneNumber ||
+                  null,
                 schoolId:
                   schoolRecord?.id ||
                   null,
