@@ -50,12 +50,11 @@ async function createImageFromPrompt(prompt) {
                     Generate a clean educational illustration.
 
                     Requirements
-
+                    • low quality
                     • colourful
                     • child friendly
                     • simple background
                     • educational
-                    • medium quality
                     • classroom suitable
                     • no watermark
                     • no text unless requested
