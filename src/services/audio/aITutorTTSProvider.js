@@ -32,13 +32,13 @@ VOICE CONFIGURATION
 Female student
 */
 const FEMALE_VOICE =
-  "en-GB-Neural2-A";
+  "en-GB-Wavenet-A";
 
 /*
 Male student
 */
 const MALE_VOICE =
-  "en-GB-Neural2-B";
+  "en-GB-Wavenet-B";
 
 /*
 Fallback voice

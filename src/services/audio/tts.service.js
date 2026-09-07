@@ -241,7 +241,7 @@ export async function generateTTS({
   topicId,
   sceneId,
   text,
-  voice = "en-GB-Neural2-B",
+  voice = "en-GB-Wavenet-B",
   speed = 1,
 }) {
   if (!text?.trim()) {

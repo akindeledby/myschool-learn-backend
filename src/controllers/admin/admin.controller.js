@@ -1,4 +1,29 @@
-import { db } from "../../lib/db.js";
+import { db } from "../../../lib/db.js";
+
+async function generateUniqueInvitationCode() {
+  while (true) {
+    const randomPart = crypto
+      .randomBytes(5)
+      .toString("hex")
+      .toUpperCase();
+
+    const invitationCode = `MSL-${randomPart}`;
+
+    const existingUser =
+      await db.user.findFirst({
+        where: {
+          invitationCode,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (!existingUser) {
+      return invitationCode;
+    }
+  }
+}
 
 export async function preRegisterSchool(req, res) {
   try {

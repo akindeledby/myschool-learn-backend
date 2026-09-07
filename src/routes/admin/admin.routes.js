@@ -1,7 +1,7 @@
 import express from "express";
-import { authMiddleWare } from "../middleware/auth.middleware.js";
-import { uploadPDF } from "../controllers/upload.controller.js";
-import { preRegisterSchool } from "../controllers/admin.controller.js";
+import { authMiddleWare } from "../../middleware/auth.middleware.js";
+import { uploadPDF } from "../../controllers/upload.controller.js";
+import { preRegisterSchool } from "../../controllers/admin/admin.controller.js";
 
 const router = express.Router();
 
@@ -14,7 +14,7 @@ router.get("/dashboard", authMiddleWare(["ADMIN"]), (req, res) => {
 });
 router.post("/upload", authMiddleWare(), uploadPDF);
 router.post(
-  "/schools/onboard",
+  "/admin/onboard",
   authMiddleWare(),
   preRegisterSchool
 );

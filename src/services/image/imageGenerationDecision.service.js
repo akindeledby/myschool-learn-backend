@@ -1,6 +1,7 @@
-const DEFAULT_MAX_IMAGES_PER_TOPIC = 1;
+const DEFAULT_MAX_IMAGES_PER_TOPIC = 2;
 
 const VISUAL_KEYWORDS = [
+  "introduction",
   "diagram",
   "structure",
   "process",
@@ -45,7 +46,6 @@ const VISUAL_KEYWORDS = [
 
 const LOW_VALUE_KEYWORDS = [
   "welcome",
-  "introduction",
   "conclusion",
   "summary",
   "revision",

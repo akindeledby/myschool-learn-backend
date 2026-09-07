@@ -20,7 +20,7 @@ export async function callTTSProvider({
 }) {
   const selectedVoice =
     !voice || voice === "default"
-      ? "en-GB-Neural2-B"
+      ? "en-GB-Wavenet-B"
       : voice;
 
   const request = {

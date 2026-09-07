@@ -435,8 +435,8 @@ export async function setUserRole(req, res) {
       subjectTaught,
       phoneNumber,
       schoolEmail,
-      address,
-      website,
+      schoolPhoneContact,
+      schoolName,
     } = req.body;
 
     const effectiveSchoolId = selectedSchoolId || domainSchoolId || null;
@@ -479,24 +479,6 @@ export async function setUserRole(req, res) {
         error: "User not found",
       });
     }
-
-    // let schoolRecord = null;
-
-    // if (schoolId) {
-    //   schoolRecord =
-    //     await db.school.findUnique({
-    //       where: {
-    //         id: schoolId,
-    //       },
-    //     });
-
-    //   if (!schoolRecord) {
-    //     return res.status(400).json({
-    //       error:
-    //         "School is not onboarded or does not exist",
-    //     });
-    //   }
-    // }
 
     let schoolRecord = null;
 
@@ -569,65 +551,53 @@ export async function setUserRole(req, res) {
          * SCHOOL ROLE
          */
         if (role === "school") {
-          if (!schoolRecord) {
-            throw new Error(
-              "School is not onboarded"
-            );
-          }
-
-          let account =
-            existingUser.account;
+          let account = existingUser.account;
 
           if (!account) {
-            account =
-            await createAccountWithFreemium(
+            account = await createAccountWithFreemium(
               tx,
               "SCHOOL",
               "FREEMIUM_SCHOOL"
             );
           }
 
-          const updatedUser =
-            await tx.user.update({
-              where: {
-                id: existingUser.id,
-              },
-              data: {
-                role: "SCHOOL",
-                accountId: account.id,
-                schoolId:
-                  schoolRecord.id,
-              },
-            });
+          const school = await tx.school.upsert({
+            where: {
+              schoolEmail: schoolEmail.trim(),
+            },
 
-          const school =
-            await tx.school.update({
-              where: {
-                id: schoolRecord.id,
-              },
-              data: {
-                userId:
-                  existingUser.id,
-                schoolEmail:
-                  schoolEmail ||
-                  schoolRecord.schoolEmail,
-                address:
-                  address ||
-                  schoolRecord.address,
-                website:
-                  website ||
-                  schoolRecord.website,
-                phone:
-                  phoneNumber ||
-                  schoolRecord.phone,
-              },
-            });
+            update: {
+              name: schoolName.trim(),
+              schoolPhoneContact:
+                schoolPhoneContact?.trim() || phoneNumber,
+              userId: existingUser.id,
+            },
+
+            create: {
+              name: schoolName.trim(),
+              schoolEmail: schoolEmail.trim(),
+              schoolPhoneContact:
+                schoolPhoneContact?.trim() || phoneNumber,
+              userId: existingUser.id,
+            },
+          });
+
+          const updatedUser = await tx.user.update({
+            where: {
+              id: existingUser.id,
+            },
+
+            data: {
+              role: "SCHOOL",
+              accountId: account.id,
+              schoolId: school.id,
+            },
+          });
 
           return {
             user: updatedUser,
             profile: school,
-            redirectUrl:
-              "/school/dashboard",
+            redirectUrl: "/school/dashboard",
           };
         }
 

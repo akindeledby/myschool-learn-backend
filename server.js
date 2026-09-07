@@ -6,7 +6,7 @@ import cors from "cors";
 
 import authRoutes from "./src/routes/auth.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
-import adminRoutes from "./src/routes/admin.routes.js";
+import adminRoutes from "./src/routes/admin/admin.routes.js";
 import schoolRoutes from "./src/routes/school.route.js";
 import parentRoutes from "./src/routes/parent.routes.js";
 import studentRoutes from "./src/routes/student.routes.js";
@@ -25,6 +25,7 @@ import leaderboardRoutes from "./src/routes/gamification/leaderboard.routes.js";
 import achievementRoutes from "./src/routes/gamification/achievements.routes.js";
 import challengeRoutes from "./src/routes/gamification/challenge.routes.js";
 import subscriptionPlanRoutes from "./src/routes/subscriptionPlans.routes.js";
+import pricePageSubscriptionPlanRoutes from "./src/routes/pricePageSubscriptionPlans.route.js"
 import paymentRoutes from "./src/routes/payment.routes.js";
 import verifyPaymentRoutes from "./src/routes/verifyPayment.routes.js";
 
@@ -51,7 +52,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-
+app.use("/api/price-page", pricePageSubscriptionPlanRoutes);
 app.use("/api/verify-payment", verifyPaymentRoutes);
 
 app.use((req, res, next) => {
