@@ -45,6 +45,7 @@ export async function getClasses(
 }
 
 
+
 export async function getClassSubjectsVideo(req, res) {
   try {
     const userId = req.user.userId;
@@ -54,9 +55,7 @@ export async function getClassSubjectsVideo(req, res) {
 
     if (studentId) {
       student = await db.student.findUnique({
-        where: {
-          id: studentId,
-        },
+        where: { id: studentId },
         select: {
           id: true,
           classId: true,
@@ -64,9 +63,7 @@ export async function getClassSubjectsVideo(req, res) {
       });
     } else {
       student = await db.student.findUnique({
-        where: {
-          userId,
-        },
+        where: { userId },
         select: {
           id: true,
           classId: true,
@@ -76,53 +73,190 @@ export async function getClassSubjectsVideo(req, res) {
 
     if (!student) {
       return res.status(404).json({
+        success: false,
         message: "Student record not found",
+        subjects: {
+          AVAILABLE: [],
+          BEING_PROCESSED: [],
+        },
       });
     }
 
     if (!student.classId) {
       return res.status(404).json({
+        success: false,
         message: "Student has not been assigned to a class",
-        subjects: [],
+        subjects: {
+          AVAILABLE: [],
+          BEING_PROCESSED: [],
+        },
       });
     }
 
+    /*
+     * Get every subject assigned to the student's class.
+     *
+     * We do not filter subjects based on topic status here because
+     * we need both AVAILABLE and BEING_PROCESSED subjects.
+     */
     const classSubjects = await db.classSubject.findMany({
       where: {
         classId: student.classId,
+      },
+      include: {
         subject: {
-          topics: {
-            some: {
-              status: "COMPLETED",
+          include: {
+            topics: {
+              select: {
+                id: true,
+                status: true,
+              },
             },
           },
         },
       },
-      include: {
-        subject: true,
-      },
     });
 
     if (classSubjects.length === 0) {
-      return res.status(404).json({
-        message: "No subjects with completed topics found for this class",
-        subjects: [],
+      return res.status(200).json({
+        success: true,
+        message: "No subjects found for this class",
+        subjects: {
+          AVAILABLE: [],
+          BEING_PROCESSED: [],
+        },
       });
     }
 
-    const subjects = classSubjects
-      .map(({ subject }) => subject)
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const availableSubjects = [];
+    const beingProcessedSubjects = [];
 
-    return res.status(200).json(subjects);
+    for (const { subject } of classSubjects) {
+      const hasCompletedTopic = subject.topics.some(
+        (topic) => topic.status === "COMPLETED"
+      );
+
+      if (hasCompletedTopic) {
+        availableSubjects.push({
+          ...subject,
+          videoStatus: "AVAILABLE",
+        });
+      } else {
+        beingProcessedSubjects.push({
+          ...subject,
+          videoStatus: "BEING_PROCESSED",
+        });
+      }
+    }
+
+    // Sort alphabetically
+    availableSubjects.sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
+    beingProcessedSubjects.sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
+    return res.status(200).json({
+      success: true,
+      subjects: {
+        AVAILABLE: availableSubjects,
+        BEING_PROCESSED: beingProcessedSubjects,
+      },
+    });
   } catch (error) {
     console.error("getClassSubjectsVideo error:", error);
 
     return res.status(500).json({
+      success: false,
       message: "Failed to fetch subjects",
+      subjects: {
+        AVAILABLE: [],
+        BEING_PROCESSED: [],
+      },
     });
   }
 }
+
+// export async function getClassSubjectsVideo(req, res) {
+//   try {
+//     const userId = req.user.userId;
+//     const { studentId } = req.query;
+
+//     let student;
+
+//     if (studentId) {
+//       student = await db.student.findUnique({
+//         where: {
+//           id: studentId,
+//         },
+//         select: {
+//           id: true,
+//           classId: true,
+//         },
+//       });
+//     } else {
+//       student = await db.student.findUnique({
+//         where: {
+//           userId,
+//         },
+//         select: {
+//           id: true,
+//           classId: true,
+//         },
+//       });
+//     }
+
+//     if (!student) {
+//       return res.status(404).json({
+//         message: "Student record not found",
+//       });
+//     }
+
+//     if (!student.classId) {
+//       return res.status(404).json({
+//         message: "Student has not been assigned to a class",
+//         subjects: [],
+//       });
+//     }
+
+//     const classSubjects = await db.classSubject.findMany({
+//       where: {
+//         classId: student.classId,
+//         subject: {
+//           topics: {
+//             some: {
+//               status: "COMPLETED",
+//             },
+//           },
+//         },
+//       },
+//       include: {
+//         subject: true,
+//       },
+//     });
+
+//     if (classSubjects.length === 0) {
+//       return res.status(404).json({
+//         message: "No subjects with completed topics found for this class",
+//         subjects: [],
+//       });
+//     }
+
+//     const subjects = classSubjects
+//       .map(({ subject }) => subject)
+//       .sort((a, b) => a.name.localeCompare(b.name));
+
+//     return res.status(200).json(subjects);
+//   } catch (error) {
+//     console.error("getClassSubjectsVideo error:", error);
+
+//     return res.status(500).json({
+//       message: "Failed to fetch subjects",
+//     });
+//   }
+// }
 
 
 export async function getClassSubjectsTutor(
