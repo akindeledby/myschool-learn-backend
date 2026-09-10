@@ -96,7 +96,7 @@ export async function resolveTutorConversationContext({
     //     },
     //   });
 
-        const verifiedSession =
+    const verifiedSession =
       await db.tutorLessonSession.findFirst({
         where: {
           id: lessonSessionId,

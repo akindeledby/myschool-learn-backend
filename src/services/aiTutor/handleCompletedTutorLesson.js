@@ -12,7 +12,6 @@ continueCompletedTutorLesson,
 export async function handleCompletedTutorLesson({
 req,
 res,
-userId,
 studentId,
 topic,
 objectives,
@@ -44,10 +43,6 @@ if (!topic?.id) {
   throw error; 
 } 
 
-// console.log( 
-//   "[COMPLETED LESSON] Loading student:", 
-//   studentId 
-// ); 
 
 const student = 
   await db.student.findUnique({ 
@@ -74,28 +69,6 @@ if (!student) {
 
   throw error; 
 } 
-
-// console.log( 
-//   "[COMPLETED LESSON] Student loaded:", 
-//   student.id 
-// ); 
-
-// if ( 
-//   student.userId && 
-//   student.userId !== userId 
-// ) { 
-//   const error = new Error( 
-//     "Access denied." 
-//   ); 
-
-//   error.statusCode = 403; 
-
-//   throw error; 
-// } 
-
-// console.log( 
-//   "[COMPLETED LESSON] Finding conversation for topic..." 
-// ); 
 
 let conversation = 
   await db.tutorConversation.findFirst({ 
@@ -126,13 +99,6 @@ let conversation =
 let isNewConversation = false; 
 
 if (!conversation) { 
-  // console.log( 
-  //   "[COMPLETED LESSON] No existing conversation found." 
-  // ); 
-
-  // console.log( 
-  //   "[COMPLETED LESSON] Creating conversation..." 
-  // ); 
 
   conversation = 
     await createConversation({ 
@@ -143,11 +109,6 @@ if (!conversation) {
     }); 
 
   isNewConversation = true; 
-
-  // console.log( 
-  //   "[COMPLETED LESSON] Conversation created:", 
-  //   conversation?.id 
-  // ); 
 
   if (!conversation?.id) { 
     const error = new Error( 
@@ -202,15 +163,6 @@ const normalizedMessage =
   message || 
   `I want to continue with ${topic.title}.`; 
 
-// console.log( 
-//   "[COMPLETED LESSON] User message:", 
-//   normalizedMessage 
-// ); 
-
-// console.log( 
-//   "[COMPLETED LESSON] Saving user message..." 
-// ); 
-
 const savedUserMessage = 
   await saveMessage({ 
     conversationId: 
@@ -236,14 +188,6 @@ if (!savedUserMessage?.id) {
   throw error; 
 } 
 
-// console.log( 
-//   "[COMPLETED LESSON] User message saved:", 
-//   savedUserMessage.id 
-// ); 
-
-// console.log( 
-//   "[COMPLETED LESSON] Passing completed lesson to continuation handler..." 
-// ); 
 
 return await continueCompletedTutorLesson({ 
   req, 
@@ -263,9 +207,6 @@ return await continueCompletedTutorLesson({
     normalizedMessage, 
 
   conversation, 
-
-  userMessage: 
-    savedUserMessage, 
 
   isNewConversation, 
 }); 

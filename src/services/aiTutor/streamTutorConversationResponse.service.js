@@ -26,8 +26,6 @@ export async function streamTutorConversationResponse({
 
   message,
 
-  userMessage = null,
-
   systemPrompt,
 
   isNewConversation = false,
@@ -119,22 +117,27 @@ export async function streamTutorConversationResponse({
     ============================================================
     */
 
+   /*
+    ============================================================
+    PREVIOUS MESSAGES
+    ============================================================
+    *
+    * The current user message has already been saved by the
+    * controller and is therefore the last message in the
+    * refreshed conversation.
+    *
+    * Remove the last message so the current message is supplied
+    * separately through `message`.
+    *
+    ============================================================
+    */
+
     let previousMessages =
       conversation.messages || [];
 
-    if (userMessage?.id) {
-      previousMessages =
-        previousMessages.filter(
-          (msg) =>
-            msg.id !== userMessage.id
-        );
-    } else {
-      previousMessages =
-        previousMessages.slice(0, -1);
-    }
-
     previousMessages =
       previousMessages
+        .slice(0, -1)
         .slice(-20)
         .map((msg) => ({
           role:
@@ -149,20 +152,6 @@ export async function streamTutorConversationResponse({
             },
           ],
         }));
-
-
-    // console.log(
-    //   "[TutorConversationStream] Starting stream:",
-    //   {
-    //     streamType,
-    //     studentId: student.id,
-    //     conversationId: conversation.id,
-    //     lessonSessionId,
-    //     previousMessages:
-    //       previousMessages.length,
-    //   }
-    // );
-
 
     /*
     ============================================================
@@ -253,10 +242,6 @@ export async function streamTutorConversationResponse({
       if (res.flush) {
         res.flush();
       }
-
-      // console.log(
-      //   "[TutorConversationStream] lessonCompleted event sent."
-      // );
     }
 
 
@@ -398,10 +383,6 @@ export async function streamTutorConversationResponse({
         imageContext ||
         fullResponse;
 
-      // console.log(
-      //   "[TutorConversationStream] Starting Tutor image generation."
-      // );
-
       imageGenerationTask =
         createTutorImage({
           studentMessage:
@@ -471,10 +452,6 @@ export async function streamTutorConversationResponse({
       }
 
       imageDelivered = true;
-
-      // console.log(
-      //   "[TutorConversationStream] Image delivered."
-      // );
     }
 
 

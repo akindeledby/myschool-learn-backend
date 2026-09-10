@@ -30,11 +30,6 @@ import {
 
 export async function chatWithTutorStream(req, res) {
   try {
-    /*
-    ============================================================
-    AUTHENTICATION
-    ============================================================
-    */
 
     const userId = req.user?.userId;
 
@@ -57,16 +52,6 @@ export async function chatWithTutorStream(req, res) {
       lessonSessionId,
       message,
     } = req.body;
-
-    // console.log(
-    //   "[TutorStream] Request:",
-    //   {
-    //     studentId,
-    //     conversationId:
-    //       requestedConversationId,
-    //     lessonSessionId,
-    //   }
-    // );
 
     /*
     ============================================================
@@ -130,10 +115,6 @@ export async function chatWithTutorStream(req, res) {
     ============================================================
     */
 
-    // console.log(
-    //   "[TutorStream] Resolving Tutor conversation context..."
-    // );
-
     const tutorContext =
       await resolveTutorConversationContext({
         student,
@@ -149,11 +130,6 @@ export async function chatWithTutorStream(req, res) {
           lessonSessionId ||
           null,
       });
-
-    // console.log(
-    //   "[TutorStream] Tutor context resolved:",
-    //   tutorContext?.type
-    // );
 
     /*
     ============================================================
@@ -175,9 +151,6 @@ export async function chatWithTutorStream(req, res) {
     */
 
     if (resolvedConversationId) {
-      // console.log(
-      //   "[TutorStream] Verifying conversation ownership..."
-      // );
 
       const ownedConversation =
         await verifyConversationOwnership({
@@ -209,11 +182,6 @@ export async function chatWithTutorStream(req, res) {
             "Conversation not found.",
         });
       }
-
-      // console.log(
-      //   "[TutorStream] Existing conversation:",
-      //   conversation.id
-      // );
     }
 
     /*
@@ -231,10 +199,6 @@ export async function chatWithTutorStream(req, res) {
             )}...`
           : normalizedMessage;
 
-      // console.log(
-      //   "[TutorStream] Creating new conversation..."
-      // );
-
       conversation =
         await createConversation({
           studentId:
@@ -251,10 +215,6 @@ export async function chatWithTutorStream(req, res) {
         );
       }
 
-      // console.log(
-      //   "[TutorStream] Conversation created:",
-      //   conversation.id
-      // );
     }
 
     /*
@@ -273,9 +233,6 @@ export async function chatWithTutorStream(req, res) {
     let verifiedLessonSession = null;
 
     if (lessonSessionId) {
-      // console.log(
-      //   "[TutorStream] Verifying explicit lesson session..."
-      // );
 
       verifiedLessonSession =
         await verifyTutorLessonSession({
@@ -308,10 +265,6 @@ export async function chatWithTutorStream(req, res) {
     * The unified streaming service must never save it again.
     */
 
-    // console.log(
-    //   "[TutorStream] Saving USER message..."
-    // );
-
     const savedUserMessage =
       await saveMessage({
         conversationId:
@@ -327,12 +280,6 @@ export async function chatWithTutorStream(req, res) {
         content:
           normalizedMessage,
       });
-
-    // console.log(
-    //   "[TutorStream] USER message saved:",
-    //   savedUserMessage?.id ||
-    //     "(no id returned)"
-    // );
 
     /*
     ============================================================
@@ -369,9 +316,6 @@ export async function chatWithTutorStream(req, res) {
       tutorContext.type ===
       "COMPLETED_LESSON"
     ) {
-      // console.log(
-      //   "[TutorStream] Routing to completed lesson..."
-      // );
 
       return await continueCompletedTutorLesson({
         req,
@@ -431,9 +375,6 @@ export async function chatWithTutorStream(req, res) {
         });
       }
 
-      // console.log(
-      //   "[TutorStream] Routing to active lesson..."
-      // );
 
       return await continueTutorLessonContext({
         req,
@@ -472,9 +413,6 @@ export async function chatWithTutorStream(req, res) {
       tutorContext.type ===
       "PREVIOUS_TOPIC"
     ) {
-      // console.log(
-      //   "[TutorStream] Routing to previous topic..."
-      // );
 
       return await startTutorLessonFromContext({
         req,
@@ -513,9 +451,6 @@ export async function chatWithTutorStream(req, res) {
       tutorContext.type ===
       "NEW_TOPIC"
     ) {
-      // console.log(
-      //   "[TutorStream] Routing to new topic..."
-      // );
 
       return await startTutorLessonFromContext({
         req,
@@ -557,9 +492,6 @@ export async function chatWithTutorStream(req, res) {
       tutorContext.type ===
       "LESSON_CONTEXT"
     ) {
-      // console.log(
-      //   "[TutorStream] Routing to lesson context..."
-      // );
 
       return await startTutorLessonFromContext({
         req,
@@ -618,9 +550,6 @@ export async function chatWithTutorStream(req, res) {
     * 12. Background Tutor processing
     */
 
-    // console.log(
-    //   "[TutorStream] Building general Tutor context..."
-    // );
 
     const generalTutorContext =
       await buildTutorContext(
@@ -658,33 +587,29 @@ export async function chatWithTutorStream(req, res) {
     * saved user message from previousMessages.
     */
 
-    const previousMessages =
-      conversation.messages
-        ?.slice(0, -1)
-        ?.slice(-20)
-        ?.map((msg) => ({
-          role:
-            msg.role === "assistant"
-              ? "model"
-              : "user",
+    // const previousMessages =
+    //   conversation.messages
+    //     ?.slice(0, -1)
+    //     ?.slice(-20)
+    //     ?.map((msg) => ({
+    //       role:
+    //         msg.role === "assistant"
+    //           ? "model"
+    //           : "user",
 
-          parts: [
-            {
-              text:
-                msg.content,
-            },
-          ],
-        })) || [];
+    //       parts: [
+    //         {
+    //           text:
+    //             msg.content,
+    //         },
+    //       ],
+    //     })) || [];
 
     /*
     ============================================================
     UNIFIED CONVERSATION STREAM
     ============================================================
     */
-
-    // console.log(
-    //   "[TutorStream] Starting unified conversation stream..."
-    // );
 
     return await streamTutorConversationResponse({
       req,
@@ -699,10 +624,10 @@ export async function chatWithTutorStream(req, res) {
 
       systemPrompt,
 
-      previousMessages,
+      // previousMessages,
 
-      userMessage:
-        savedUserMessage,
+      // userMessage:
+      //   savedUserMessage,
 
       isNewConversation,
 
@@ -994,11 +919,6 @@ export async function startTutorLesson(req, res) {
 
     const { studentId } = req.query;
 
-    // console.log(
-    //   "[START LESSON] studentId:",
-    //   studentId
-    // );
-
     const student =
       await resolveStudent({
         userId,
@@ -1012,7 +932,7 @@ export async function startTutorLesson(req, res) {
       });
     }
 
-        /*
+    /*
     ============================================================
     SUBSCRIPTION ACCESS
     ============================================================
@@ -1029,13 +949,6 @@ export async function startTutorLesson(req, res) {
     if (!access.success) {
       return res.status(403).json(access);
     }
-
-    // console.log("Student is", student)
-
-    // console.log(
-    //   "[START LESSON] Student:",
-    //   student.id
-    // );
 
     const {
       subjectId,
@@ -1055,9 +968,6 @@ export async function startTutorLesson(req, res) {
       });
     }
 
-    // console.log(
-    //   "[START LESSON] Calling getAndValidateTopic..."
-    // );
 
     const curriculumContext =
       await getAndValidateTopic({
@@ -1068,9 +978,6 @@ export async function startTutorLesson(req, res) {
         studentId: student.id,
       });
 
-    // console.log(
-    //   "[START LESSON] getAndValidateTopic completed"
-    // );
 
     const { topic } =
       curriculumContext;
@@ -1085,11 +992,11 @@ export async function startTutorLesson(req, res) {
       throw error;
     }
 
+
     const objectives =
       await ensureTopicObjectives(
         topic
       );
-
 
 
     if (
@@ -1132,9 +1039,6 @@ export async function startTutorLesson(req, res) {
 
 
     if (teachingState?.isComplete) {
-      // console.log(
-      //   "[START LESSON] Lesson is already completed."
-      // );
 
       return await handleCompletedTutorLesson({
         req,
@@ -1295,7 +1199,7 @@ export async function transcribeTutorAudioController(req, res) {
       });
     }
 
-        /*
+    /*
     ============================================================
     SUBSCRIPTION ACCESS
     ============================================================
@@ -1336,19 +1240,19 @@ export async function transcribeTutorAudioController(req, res) {
       });
     }
 
-    console.log("[TUTOR TRANSCRIPTION] Request received:", {
-      student: student.id,
-      originalName: audioFile.originalname,
-      mimeType: audioFile.mimetype,
-      size: audioFile.size,
-    });
+    // console.log("[TUTOR TRANSCRIPTION] Request received:", {
+    //   student: student.id,
+    //   originalName: audioFile.originalname,
+    //   mimeType: audioFile.mimetype,
+    //   size: audioFile.size,
+    // });
 
     const text = await transcribeTutorAudio({
       filePath: audioFile.path,
       mimeType: audioFile.mimetype,
     });
 
-    console.log("[TUTOR TRANSCRIPTION] Completed successfully.");
+    // console.log("[TUTOR TRANSCRIPTION] Completed successfully.");
 
     return res.status(200).json({
       success: true,
@@ -1377,69 +1281,3 @@ export async function transcribeTutorAudioController(req, res) {
     });
   }
 }
-
-// export async function transcribeTutorAudioController(
-//   req,
-//   res
-// ) {
-//   try {
-//     const userId =
-//       req.user?.userId;
-
-//     if (!userId) {
-//       return res.status(401).json({
-//         success: false,
-//         message:
-//           "Authentication is required.",
-//       });
-//     }
-
-//     const audioFile =
-//       req.file;
-
-//     if (!audioFile) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "Audio file is required.",
-//       });
-//     }
-
-//     const text =
-//       await transcribeTutorAudio({
-//         filePath:
-//           audioFile.path,
-
-//         mimeType:
-//           audioFile.mimetype,
-//       });
-
-//     return res.status(200).json({
-//       success: true,
-//       text,
-//     });
-//   } catch (error) {
-//     console.error(
-//       "[TUTOR TRANSCRIPTION] ERROR:",
-//       error
-//     );
-
-//     if (res.headersSent) {
-//       return;
-//     }
-
-//     const statusCode =
-//       Number.isInteger(
-//         error?.statusCode
-//       )
-//         ? error.statusCode
-//         : 500;
-
-//     return res.status(statusCode).json({
-//       success: false,
-//       message:
-//         error?.message ||
-//         "Unable to transcribe the audio.",
-//     });
-//   }
-// }
