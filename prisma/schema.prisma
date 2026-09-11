@@ -156,6 +156,7 @@ model Student {
   schoolId                    String?
   createdAt                   DateTime                 @default(now())
   updatedAt                   DateTime                 @updatedAt
+  studentSubjects             StudentSubject[]
   lessonContents              LessonNote[]
   tutorMemories               TutorMemory[]
   dailyChallengeProgresses    DailyChallengeProgress[]
@@ -197,6 +198,20 @@ model StudentProfile {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model StudentSubject {
+  studentId String
+  subjectId String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([studentId, subjectId])
+  @@index([subjectId])
 }
 
 
@@ -285,6 +300,7 @@ model Subject {
   schemeOfWorkId         String?
   createdAt              DateTime                @default(now())
   classSubjects          ClassSubject[]
+  studentSubjects        StudentSubject[]
   millionaireAttempts    MillionaireAttempt[]
   speedChallengeAttempts SpeedChallengeAttempt[]
   studentScores          StudentScore[]

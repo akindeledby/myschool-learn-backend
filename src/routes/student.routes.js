@@ -1,5 +1,5 @@
 import express from "express";
-import { getStudentProfile, fetchStudent, 
+import { getStudentProfile, fetchStudent, updateStudentSubjects,
   saveTestScore, saveExamScore, 
   fetchStudentScores, getMyAchievements,   
   updateName, updatePhone,
@@ -25,11 +25,9 @@ router.get("/lesson-notes/get/:topicId", authMiddleWare(), getLessonNote);
 router.put("/lesson-notes/save/:topicId", authMiddleWare(), saveLessonNote);
 router.delete("/deleteAccount", authMiddleWare(), deleteAccount);
 
-router.get(
-  "/academic-report",
-  authMiddleWare(),
-  getStudentAcademicReport
-);
+router.put("/update-subjects", authMiddleWare(), updateStudentSubjects);
+
+router.get("/academic-report", authMiddleWare(), getStudentAcademicReport);
 
 
 export default router;

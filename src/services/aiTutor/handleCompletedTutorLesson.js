@@ -246,18 +246,18 @@ try {
     })}\n\n` 
   ); 
 
-  if (res.flush) { 
-    res.flush(); 
-  } 
-} catch {} 
+    if (res.flush) { 
+      res.flush(); 
+    } 
+  } catch {} 
 
-try { 
-  res.end(); 
-} catch {} 
+  try { 
+    res.end(); 
+  } catch {} 
 
-return; 
+  return; 
 
-}
+  }
 }
 
 

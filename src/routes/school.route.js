@@ -6,7 +6,7 @@ import {
 const router = express.Router();
 
 router.get(
-  "/registration/schools",
+  "/registered-schools",
   getSchoolsForStudentRegistration
 );
 

@@ -5,301 +5,6 @@ import {
 } from "../services/gamification/studentProfile.service.js";
 
 
-// export async function fetchStudent(req, res) {
-//   try {
-//     // ============================================================
-//     // AUTHENTICATED USER
-//     // ============================================================
-
-//     const userId = req.user?.userId;
-
-//     if (!userId) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Authentication required.",
-//       });
-//     }
-
-//     // ============================================================
-//     // REQUESTED STUDENT ID
-//     // ============================================================
-
-//     const { studentId } = req.query;
-
-//     // Make sure we have a clean string when one is provided.
-//     const requestedStudentId =
-//       typeof studentId === "string" &&
-//       studentId.trim()
-//         ? studentId.trim()
-//         : null;
-
-//     // ============================================================
-//     // FETCH AUTHENTICATED USER
-//     // ============================================================
-
-//     const user = await db.user.findUnique({
-//       where: {
-//         id: userId,
-//       },
-
-//       select: {
-//         id: true,
-//         role: true,
-//         email: true,
-//         profileImageUrl: true,
-//         accountId: true,
-
-//         parent: {
-//           select: {
-//             id: true,
-//           },
-//         },
-
-//         student: {
-//           select: {
-//             id: true,
-//           },
-//         },
-//       },
-//     });
-
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found.",
-//       });
-//     }
-
-//     // ============================================================
-//     // DEBUGGING
-//     // ============================================================
-//     // You can keep this temporarily while testing the
-//     // Student -> Student switching issue.
-
-//     console.log("[fetchStudent] Profile request:", {
-//       userId,
-//       role: user.role,
-//       accountId: user.accountId,
-//       requestedStudentId,
-//       isParent: !!user.parent,
-//       isStudent: !!user.student,
-//     });
-
-//     // ============================================================
-//     // STUDENT PROFILE
-//     // ============================================================
-
-//     let student = null;
-
-//     // ============================================================
-//     // PARENT ACCESSING A CHILD PROFILE
-//     // ============================================================
-
-//     if (user.parent) {
-//       /*
-//        * A parent must provide the ID of the student profile
-//        * they want to access.
-//        */
-
-//       if (!requestedStudentId) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "Student ID is required when accessing a child profile.",
-//         });
-//       }
-
-//       /*
-//        * IMPORTANT:
-//        *
-//        * We do not simply search by student ID.
-//        *
-//        * We also verify accountId so that a parent cannot
-//        * access a student belonging to another account by
-//        * manually changing the studentId.
-//        */
-
-//       if (!user.accountId) {
-//         return res.status(403).json({
-//           success: false,
-//           message:
-//             "Parent account information is missing.",
-//         });
-//       }
-
-//       student = await db.student.findFirst({
-//         where: {
-//           id: requestedStudentId,
-//           accountId: user.accountId,
-//         },
-
-//         select: {
-//           id: true,
-//           firstName: true,
-//           lastName: true,
-//           age: true,
-//           gender: true,
-//           phone: true,
-//           school: true,
-//           schoolAttended: true,
-//           classLevel: true,
-//           category: true,
-//           studentImageUrl: true,
-//           accountId: true,
-//         },
-//       });
-//     }
-
-//     // ============================================================
-//     // STUDENT ACCESSING THEIR OWN PROFILE
-//     // ============================================================
-
-//     else if (user.student) {
-//       /*
-//        * A student does not get to choose another student ID.
-//        *
-//        * The student profile is resolved through the authenticated
-//        * user's userId.
-//        */
-
-//       student = await db.student.findFirst({
-//         where: {
-//           userId,
-//         },
-
-//         select: {
-//           id: true,
-//           firstName: true,
-//           lastName: true,
-//           age: true,
-//           gender: true,
-//           phone: true,
-//           school: true,
-//           schoolAttended: true,
-//           classLevel: true,
-//           category: true,
-//           studentImageUrl: true,
-//           accountId: true,
-//         },
-//       });
-//     }
-
-//     // ============================================================
-//     // USER IS NEITHER A PARENT NOR A STUDENT
-//     // ============================================================
-
-//     else {
-//       return res.status(403).json({
-//         success: false,
-//         message:
-//           "You are not authorized to access a student profile.",
-//       });
-//     }
-
-//     // ============================================================
-//     // STUDENT NOT FOUND
-//     // ============================================================
-
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message:
-//           "Student profile not found.",
-//       });
-//     }
-
-//     // ============================================================
-//     // ACTIVE SUBSCRIPTION
-//     // ============================================================
-
-//     let subscription = null;
-
-//     if (user.accountId) {
-//       subscription =
-//         await db.subscription.findFirst({
-//           where: {
-//             accountId: user.accountId,
-
-//             status: "ACTIVE",
-
-//             OR: [
-//               {
-//                 endsAt: null,
-//               },
-//               {
-//                 endsAt: {
-//                   gt: new Date(),
-//                 },
-//               },
-//             ],
-//           },
-
-//           include: {
-//             subscriptionPlan: true,
-//           },
-
-//           orderBy: {
-//             createdAt: "desc",
-//           },
-//         });
-//     }
-
-//     // ============================================================
-//     // RESPONSE
-//     // ============================================================
-
-//     const schoolAttended =
-//       student.school ||
-//       student.schoolAttended ||
-//       null;
-
-//     return res.status(200).json({
-//       success: true,
-
-//       student: {
-//         id: student.id,
-//         firstName: student.firstName,
-//         lastName: student.lastName,
-//         age: student.age,
-//         gender: student.gender,
-//         phone: student.phone,
-
-//         schoolAttended,
-
-//         classLevel: student.classLevel,
-//         category: student.category,
-//         studentImageUrl:
-//           student.studentImageUrl,
-//       },
-
-//       user: {
-//         id: user.id,
-//         role: user.role,
-//         email: user.email,
-//         profileImageUrl:
-//           user.profileImageUrl,
-//       },
-
-//       schoolAttended,
-
-//       subscription:
-//         subscription
-//           ?.subscriptionPlan
-//           ?.subscriptionPlanName ?? null,
-//     });
-//   } catch (error) {
-//     console.error(
-//       "Fetch student profile error:",
-//       error
-//     );
-
-//     return res.status(500).json({
-//       success: false,
-//       message:
-//         "Failed to fetch student profile.",
-//     });
-//   }
-// }
 
 export async function fetchStudent(req, res) {
   try {
@@ -314,21 +19,30 @@ export async function fetchStudent(req, res) {
 
     const { studentId } = req.query;
 
+    /*
+     * ---------------------------------------------------------
+     * 2. Fetch authenticated user
+     * ---------------------------------------------------------
+     */
+
     const user = await db.user.findUnique({
       where: {
         id: userId,
       },
+
       select: {
         id: true,
         role: true,
         email: true,
         profileImageUrl: true,
         accountId: true,
+
         parent: {
           select: {
             id: true,
           },
         },
+
         student: {
           select: {
             id: true,
@@ -344,10 +58,24 @@ export async function fetchStudent(req, res) {
       });
     }
 
+    /*
+     * ---------------------------------------------------------
+     * 3. Find the student
+     *
+     * Parent:
+     *   Can fetch a selected child using studentId.
+     *
+     * Student:
+     *   Can only fetch their own profile.
+     * ---------------------------------------------------------
+     */
+
     let student = null;
 
     /*
+     * ---------------------------------------------------------
      * Parent viewing a selected child
+     * ---------------------------------------------------------
      */
 
     if (studentId && user.parent) {
@@ -356,6 +84,7 @@ export async function fetchStudent(req, res) {
           id: studentId,
           accountId: user.accountId,
         },
+
         select: {
           id: true,
           firstName: true,
@@ -363,18 +92,72 @@ export async function fetchStudent(req, res) {
           age: true,
           gender: true,
           phone: true,
-          school: true,
           schoolAttended: true,
           classLevel: true,
           category: true,
           studentImageUrl: true,
           accountId: true,
+          classId: true,
+          schoolId: true,
+
+          school: {
+            select: {
+              name: true,
+            },
+          },
+
+          /*
+           * ---------------------------------------------------
+           * Class assigned to the student
+           *
+           * We use this to determine which subjects are
+           * available to the student.
+           * ---------------------------------------------------
+           */
+
+          class: {
+            select: {
+              id: true,
+              name: true,
+
+              classSubjects: {
+                select: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+
+                orderBy: {
+                  subject: {
+                    name: "asc",
+                  },
+                },
+              },
+            },
+          },
+
+          /*
+           * ---------------------------------------------------
+           * Subjects already selected by this student
+           * ---------------------------------------------------
+           */
+
+          studentSubjects: {
+            select: {
+              subjectId: true,
+            },
+          },
         },
       });
     }
 
     /*
+     * ---------------------------------------------------------
      * Logged in student
+     * ---------------------------------------------------------
      */
 
     else if (user.student) {
@@ -382,6 +165,7 @@ export async function fetchStudent(req, res) {
         where: {
           userId,
         },
+
         select: {
           id: true,
           firstName: true,
@@ -389,26 +173,122 @@ export async function fetchStudent(req, res) {
           age: true,
           gender: true,
           phone: true,
-          school: true,
           schoolAttended: true,
           classLevel: true,
           category: true,
           studentImageUrl: true,
           accountId: true,
+          classId: true,
+          schoolId: true,
+
+          school: {
+            select: {
+              name: true,
+            },
+          },
+
+          /*
+           * ---------------------------------------------------
+           * Class assigned to the student
+           * ---------------------------------------------------
+           */
+
+          class: {
+            select: {
+              id: true,
+              name: true,
+
+              classSubjects: {
+                select: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+
+                orderBy: {
+                  subject: {
+                    name: "asc",
+                  },
+                },
+              },
+            },
+          },
+
+          /*
+           * ---------------------------------------------------
+           * Subjects already selected by this student
+           * ---------------------------------------------------
+           */
+
+          studentSubjects: {
+            select: {
+              subjectId: true,
+            },
+          },
         },
       });
     }
 
+    /*
+     * ---------------------------------------------------------
+     * 4. Student not found
+     * ---------------------------------------------------------
+     */
+
     if (!student) {
       return res.status(404).json({
         success: false,
-        message:
-          "Student profile not found.",
+        message: "Student profile not found.",
       });
     }
 
     /*
-     * Active subscription
+     * ---------------------------------------------------------
+     * 5. Format available subjects
+     *
+     * These are determined entirely by the student's class.
+     *
+     * Example:
+     *
+     * Student
+     *    ↓
+     * classId
+     *    ↓
+     * Class
+     *    ↓
+     * ClassSubject
+     *    ↓
+     * Subject
+     * ---------------------------------------------------------
+     */
+
+    const availableSubjects =
+      student.class?.classSubjects?.map(
+        (classSubject) => ({
+          id: classSubject.subject.id,
+          name: classSubject.subject.name,
+        })
+      ) || [];
+
+    /*
+     * ---------------------------------------------------------
+     * 6. Format student's selected subjects
+     * ---------------------------------------------------------
+     */
+
+    const selectedSubjectIds =
+      student.studentSubjects?.map(
+        (studentSubject) =>
+          studentSubject.subjectId
+      ) || [];
+
+    /*
+     * ---------------------------------------------------------
+     * 7. Active subscription
+     * ---------------------------------------------------------
      */
 
     let subscription = null;
@@ -418,7 +298,9 @@ export async function fetchStudent(req, res) {
         await db.subscription.findFirst({
           where: {
             accountId: user.accountId,
+
             status: "ACTIVE",
+
             OR: [
               {
                 endsAt: null,
@@ -430,47 +312,110 @@ export async function fetchStudent(req, res) {
               },
             ],
           },
+
           include: {
             subscriptionPlan: true,
           },
+
           orderBy: {
             createdAt: "desc",
           },
         });
     }
 
+    /*
+     * ---------------------------------------------------------
+     * 8. Return response
+     * ---------------------------------------------------------
+     */
+
     return res.status(200).json({
       success: true,
 
       student: {
         id: student.id,
-        firstName: student.firstName,
-        lastName: student.lastName,
-        age: student.age,
-        gender: student.gender,
-        phone: student.phone,
+
+        firstName:
+          student.firstName,
+
+        lastName:
+          student.lastName,
+
+        age:
+          student.age,
+
+        gender:
+          student.gender,
+
+        phone:
+          student.phone,
+
         schoolAttended:
-          student.school ||
           student.schoolAttended ||
+          student.school?.name ||
           null,
-        classLevel: student.classLevel,
-        category: student.category,
+
+        classLevel:
+          student.classLevel,
+
+        classId:
+          student.classId,
+
+        category:
+          student.category,
+
         studentImageUrl:
           student.studentImageUrl,
+
+        /*
+         * These are the subjects this particular
+         * student has selected.
+         */
+
+        subjects:
+          selectedSubjectIds,
       },
 
+      /*
+       * -------------------------------------------------------
+       * Subjects available for the student's class
+       *
+       * The frontend will use this to generate the
+       * checkbox list dynamically.
+       * -------------------------------------------------------
+       */
+
+      availableSubjects,
+
+      /*
+       * -------------------------------------------------------
+       * Authenticated user information
+       * -------------------------------------------------------
+       */
+
       user: {
-        id: user.id,
-        role: user.role,
-        email: user.email,
+        id:
+          user.id,
+
+        role:
+          user.role,
+
+        email:
+          user.email,
+
         profileImageUrl:
           user.profileImageUrl,
       },
 
       schoolAttended:
-        student.school ||
         student.schoolAttended ||
         null,
+
+      /*
+       * -------------------------------------------------------
+       * Active subscription
+       * -------------------------------------------------------
+       */
 
       subscription:
         subscription
@@ -492,9 +437,372 @@ export async function fetchStudent(req, res) {
 }
 
 
-/**
- * GET /api/gamification/profile
- */
+
+export async function updateStudentSubjects(req, res) {
+  try {
+
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 2. Get optional studentId from query
+     *
+     * Example:
+     *
+     * /api/student/update-subjects?studentId=xxxxx
+     *
+     * studentId is NOT required because a logged in student
+     * can be identified through req.user.userId.
+     * ---------------------------------------------------------
+     */
+
+    const { studentId } = req.query;
+
+    /*
+     * ---------------------------------------------------------
+     * 3. Get authenticated user
+     * ---------------------------------------------------------
+     */
+
+    const user = await db.user.findUnique({
+      where: {
+        id: userId,
+      },
+
+      select: {
+        id: true,
+        accountId: true,
+
+        parent: {
+          select: {
+            id: true,
+          },
+        },
+
+        student: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 4. Validate subjectIds
+     * ---------------------------------------------------------
+     */
+
+    const { subjectIds } = req.body;
+
+    if (!Array.isArray(subjectIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "Subject IDs must be an array.",
+      });
+    }
+
+    if (subjectIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one subject.",
+      });
+    }
+
+    if (subjectIds.length > 10) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A student can select a maximum of 10 subjects.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 5. Clean and remove duplicate subject IDs
+     * ---------------------------------------------------------
+     */
+
+    const uniqueSubjectIds = [
+      ...new Set(
+        subjectIds
+          .filter(
+            (id) =>
+              typeof id === "string" &&
+              id.trim()
+          )
+          .map((id) => id.trim())
+      ),
+    ];
+
+    if (uniqueSubjectIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "No valid subjects were provided.",
+      });
+    }
+
+    if (uniqueSubjectIds.length > 10) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A student can select a maximum of 10 subjects.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 6. Determine which student is being updated
+     * ---------------------------------------------------------
+     */
+
+    let student = null;
+
+    /*
+     * ---------------------------------------------------------
+     * Parent updating a selected child
+     *
+     * If studentId is supplied, verify that the child belongs
+     * to the same account as the authenticated parent.
+     * ---------------------------------------------------------
+     */
+
+    if (studentId && user.parent) {
+      student = await db.student.findFirst({
+        where: {
+          id: studentId,
+          accountId: user.accountId,
+        },
+
+        select: {
+          id: true,
+          classId: true,
+        },
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Student not found or you do not have permission to update this student.",
+        });
+      }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Logged in student updating themselves
+     *
+     * No studentId is required.
+     * ---------------------------------------------------------
+     */
+
+    else if (user.student) {
+      student = await db.student.findFirst({
+        where: {
+          userId,
+        },
+
+        select: {
+          id: true,
+          classId: true,
+        },
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: "Student profile not found.",
+        });
+      }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Parent did not provide a studentId
+     *
+     * A parent may have multiple children, so we cannot
+     * safely guess which child should receive the subjects.
+     * ---------------------------------------------------------
+     */
+
+    else if (user.parent && !studentId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Student ID is required when a parent is updating a student's subjects.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * No valid student context
+     * ---------------------------------------------------------
+     */
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Student profile could not be determined.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 7. Make sure the student belongs to a class
+     * ---------------------------------------------------------
+     */
+
+    if (!student.classId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The student is not assigned to a class.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 8. Get subjects assigned to the student's class
+     * ---------------------------------------------------------
+     *
+     * This is extremely important.
+     *
+     * We do not simply trust the subject IDs submitted by
+     * the frontend.
+     *
+     * We verify that every subject belongs to the class
+     * assigned to this student.
+     * ---------------------------------------------------------
+     */
+
+    const classSubjects =
+      await db.classSubject.findMany({
+        where: {
+          classId: student.classId,
+
+          subjectId: {
+            in: uniqueSubjectIds,
+          },
+        },
+
+        select: {
+          subjectId: true,
+        },
+      });
+
+    const allowedSubjectIds =
+      classSubjects.map(
+        (classSubject) =>
+          classSubject.subjectId
+      );
+
+    /*
+     * ---------------------------------------------------------
+     * 9. Find subjects that are NOT available for the class
+     * ---------------------------------------------------------
+     */
+
+    const invalidSubjectIds =
+      uniqueSubjectIds.filter(
+        (subjectId) =>
+          !allowedSubjectIds.includes(
+            subjectId
+          )
+      );
+
+    if (invalidSubjectIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "One or more selected subjects are not available for the student's class.",
+      });
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * 10. Save student's subjects
+     *
+     * We replace the previous selection with the new
+     * selection.
+     *
+     * Transaction ensures that the delete and create
+     * operations succeed together.
+     * ---------------------------------------------------------
+     */
+
+    await db.$transaction(async (tx) => {
+      /*
+       * Remove previous selections
+       */
+
+      await tx.studentSubject.deleteMany({
+        where: {
+          studentId: student.id,
+        },
+      });
+
+      /*
+       * Save new selections
+       */
+
+      await tx.studentSubject.createMany({
+        data: uniqueSubjectIds.map(
+          (subjectId) => ({
+            studentId: student.id,
+            subjectId,
+          })
+        ),
+      });
+    });
+
+    /*
+     * ---------------------------------------------------------
+     * 11. Success response
+     * ---------------------------------------------------------
+     */
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        "Student subjects updated successfully.",
+
+      studentId: student.id,
+
+      subjectIds: uniqueSubjectIds,
+    });
+  } catch (error) {
+    console.error(
+      "Update student subjects error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to update student subjects.",
+    });
+  }
+}
+
+
 export async function getStudentProfile(
   req,
   res
@@ -2015,1313 +2323,6 @@ export async function saveTestScore(req, res) {
     });
   }
 }
-
-// export async function saveTestScore(req, res) {
-//   try {
-//     /*
-//      * ========================================================
-//      * 1. AUTHENTICATION AND STUDENT
-//      * ========================================================
-//      */
-
-//     const userId = req.user?.userId;
-
-//     const { studentId } = req.query;
-
-//     const normalizedStudentId =
-//       typeof studentId === "string"
-//         ? studentId.trim()
-//         : "";
-
-//     if (
-//       !normalizedStudentId ||
-//       normalizedStudentId === "null" ||
-//       normalizedStudentId === "undefined"
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Student ID is required.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 2. REQUEST BODY
-//      * ========================================================
-//      */
-
-//     const {
-//       subjectId,
-//       termId,
-//       noOfQuestions,
-//       answers,
-//     } = req.body;
-
-//     /*
-//      * ========================================================
-//      * 3. BASIC VALIDATION
-//      * ========================================================
-//      */
-
-//     if (
-//       !subjectId ||
-//       typeof subjectId !== "string"
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "subjectId is required.",
-//       });
-//     }
-
-//     if (
-//       !termId ||
-//       typeof termId !== "string"
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "termId is required.",
-//       });
-//     }
-
-//     if (
-//       typeof noOfQuestions !== "number" ||
-//       !Number.isInteger(noOfQuestions) ||
-//       noOfQuestions <= 0
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "noOfQuestions must be a positive integer.",
-//       });
-//     }
-
-//     if (!Array.isArray(answers)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Answers must be an array.",
-//       });
-//     }
-
-//     if (answers.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "No answers were submitted.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 4. VALIDATE ANSWER OBJECTS
-//      * ========================================================
-//      */
-
-//     const invalidAnswer = answers.find((item) => {
-//       if (!item) {
-//         return true;
-//       }
-
-//       if (
-//         typeof item.questionId !== "string" ||
-//         !item.questionId.trim()
-//       ) {
-//         return true;
-//       }
-
-//       if (
-//         typeof item.topicId !== "string" ||
-//         !item.topicId.trim()
-//       ) {
-//         return true;
-//       }
-
-//       if (
-//         item.answer !== null &&
-//         typeof item.answer !== "string"
-//       ) {
-//         return true;
-//       }
-
-//       return false;
-//     });
-
-//     if (invalidAnswer) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "One or more submitted answers are invalid.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 5. NORMALIZE QUESTION IDS
-//      * ========================================================
-//      */
-
-//     const uniqueQuestionIds = [
-//       ...new Set(
-//         answers.map((item) =>
-//           item.questionId.trim()
-//         )
-//       ),
-//     ];
-
-//     if (
-//       noOfQuestions !==
-//       uniqueQuestionIds.length
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "noOfQuestions does not match the number of submitted questions.",
-//         submittedQuestions: noOfQuestions,
-//         actualQuestions:
-//           uniqueQuestionIds.length,
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 6. FETCH STUDENT, SUBJECT AND TERM
-//      *
-//      * These are outside the transaction.
-//      * ========================================================
-//      */
-
-//     const [student, subject, term] =
-//       await Promise.all([
-//         db.student.findUnique({
-//           where: {
-//             id: normalizedStudentId,
-//           },
-//           select: {
-//             id: true,
-//             classId: true,
-//           },
-//         }),
-
-//         db.subject.findUnique({
-//           where: {
-//             id: subjectId,
-//           },
-//           select: {
-//             id: true,
-//             name: true,
-//           },
-//         }),
-
-//         db.term.findUnique({
-//           where: {
-//             id: termId,
-//           },
-//           select: {
-//             id: true,
-//             name: true,
-//           },
-//         }),
-//       ]);
-
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Student not found.",
-//       });
-//     }
-
-//     if (!subject) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Subject not found.",
-//       });
-//     }
-
-//     if (!term) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Term not found.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 7. FETCH QUESTIONS
-//      *
-//      * IMPORTANT:
-//      *
-//      * Question does NOT have topicId.
-//      *
-//      * Relationship:
-//      *
-//      * Question → Quiz → Topic
-//      * ========================================================
-//      */
-
-//     const questions =
-//       await db.question.findMany({
-//         where: {
-//           id: {
-//             in: uniqueQuestionIds,
-//           },
-//         },
-
-//         select: {
-//           id: true,
-//           text: true,
-//           options: true,
-//           correctAnswer: true,
-//           explanation: true,
-//           quizId: true,
-
-//           quiz: {
-//             select: {
-//               id: true,
-//               topicId: true,
-
-//               topic: {
-//                 select: {
-//                   id: true,
-//                   title: true,
-//                   subjectId: true,
-//                   termId: true,
-//                   classId: true,
-//                 },
-//               },
-//             },
-//           },
-//         },
-//       });
-
-//     /*
-//      * ========================================================
-//      * 8. VERIFY ALL QUESTIONS EXIST
-//      * ========================================================
-//      */
-
-//     if (
-//       questions.length !==
-//       uniqueQuestionIds.length
-//     ) {
-//       const foundIds = new Set(
-//         questions.map(
-//           (question) => question.id
-//         )
-//       );
-
-//       const missingQuestionIds =
-//         uniqueQuestionIds.filter(
-//           (id) => !foundIds.has(id)
-//         );
-
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "One or more submitted questions could not be found.",
-//         missingQuestionIds,
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 9. VERIFY QUESTION TOPICS
-//      * ========================================================
-//      */
-
-//     for (const question of questions) {
-//       const topic = question.quiz?.topic;
-
-//       if (!topic) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions are not associated with a valid topic.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Subject verification
-//        */
-
-//       if (
-//         topic.subjectId !== subjectId
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the selected subject.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Class verification
-//        */
-
-//       if (
-//         topic.classId !== student.classId
-//       ) {
-//         return res.status(403).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the student's class.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Term verification
-//        */
-
-//       if (
-//         topic.termId !== termId
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the selected term.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Verify frontend topicId against
-//        * authoritative database topicId.
-//        */
-
-//       const submittedAnswer =
-//         answers.find(
-//           (item) =>
-//             item.questionId ===
-//             question.id
-//         );
-
-//       if (
-//         !submittedAnswer ||
-//         submittedAnswer.topicId !==
-//           topic.id
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more submitted topic IDs do not match the questions.",
-//           questionId: question.id,
-//         });
-//       }
-//     }
-
-//     /*
-//      * ========================================================
-//      * 10. VERIFY ALL QUESTIONS ARE FROM ONE TERM
-//      * ========================================================
-//      */
-
-//     const questionTermIds = [
-//       ...new Set(
-//         questions.map(
-//           (question) =>
-//             question.quiz.topic.termId
-//         )
-//       ),
-//     ];
-
-//     if (
-//       questionTermIds.length !== 1
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "All questions in one test must belong to the same term.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 11. VERIFY ALL QUESTIONS ARE FROM THE SAME SUBJECT
-//      * ========================================================
-//      */
-
-//     const questionSubjectIds = [
-//       ...new Set(
-//         questions.map(
-//           (question) =>
-//             question.quiz.topic.subjectId
-//         )
-//       ),
-//     ];
-
-//     if (
-//       questionSubjectIds.length !== 1 ||
-//       questionSubjectIds[0] !== subjectId
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "All questions must belong to the selected subject.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 12. QUESTION LOOKUP MAP
-//      * ========================================================
-//      */
-
-//     const questionMap =
-//       new Map(
-//         questions.map(
-//           (question) => [
-//             question.id,
-//             question,
-//           ]
-//         )
-//       );
-
-//     /*
-//      * ========================================================
-//      * 13. NORMALIZE ANSWERS
-//      * ========================================================
-//      */
-
-//     const normalizeAnswer = (
-//       value
-//     ) => {
-//       if (
-//         typeof value !== "string"
-//       ) {
-//         return "";
-//       }
-
-//       return value
-//         .trim()
-//         .replace(/\s+/g, " ")
-//         .toLowerCase();
-//     };
-
-//     /*
-//      * ========================================================
-//      * 14. GRADE QUESTIONS
-//      *
-//      * Entirely in memory.
-//      * No database transaction here.
-//      * ========================================================
-//      */
-
-//     let correctCount = 0;
-
-//     const gradedResults =
-//       answers.map((submitted) => {
-//         const question =
-//           questionMap.get(
-//             submitted.questionId
-//           );
-
-//         if (!question) {
-//           return {
-//             questionId:
-//               submitted.questionId,
-
-//             selectedAnswer:
-//               submitted.answer,
-
-//             isCorrect: false,
-//           };
-//         }
-
-//         const selectedAnswer =
-//           normalizeAnswer(
-//             submitted.answer
-//           );
-
-//         const correctAnswer =
-//           normalizeAnswer(
-//             question.correctAnswer
-//           );
-
-//         const isCorrect =
-//           selectedAnswer !== "" &&
-//           correctAnswer !== "" &&
-//           selectedAnswer ===
-//             correctAnswer;
-
-//         if (isCorrect) {
-//           correctCount++;
-//         }
-
-//         return {
-//           questionId:
-//             question.id,
-
-//           selectedAnswer:
-//             submitted.answer,
-
-//           isCorrect,
-
-//           correctAnswer:
-//             question.correctAnswer,
-
-//           explanation:
-//             question.explanation ||
-//             undefined,
-//         };
-//       });
-
-//     /*
-//      * ========================================================
-//      * 15. TEST SCORE
-//      * ========================================================
-//      */
-
-//     const totalQuestions =
-//       uniqueQuestionIds.length;
-
-//     const score =
-//       totalQuestions > 0
-//         ? Number(
-//             (
-//               (correctCount /
-//                 totalQuestions) *
-//               100
-//             ).toFixed(2)
-//           )
-//         : 0;
-
-//     /*
-//      * ========================================================
-//      * 16. BUILD TOPIC STATISTICS
-//      *
-//      * Entirely in memory.
-//      * ========================================================
-//      */
-
-//     const topicStats =
-//       new Map();
-
-//     for (const submitted of answers) {
-//       const question =
-//         questionMap.get(
-//           submitted.questionId
-//         );
-
-//       if (!question) {
-//         continue;
-//       }
-
-//       const topic =
-//         question.quiz.topic;
-
-//       const topicId =
-//         topic.id;
-
-//       if (
-//         !topicStats.has(topicId)
-//       ) {
-//         topicStats.set(
-//           topicId,
-//           {
-//             id: topicId,
-//             title: topic.title,
-
-//             questions: 0,
-//             answered: 0,
-//             correct: 0,
-
-//             attemptedQuestionIds: [],
-//           }
-//         );
-//       }
-
-//       const stats =
-//         topicStats.get(topicId);
-
-//       stats.questions++;
-
-//       const hasAnswer =
-//         typeof submitted.answer ===
-//           "string" &&
-//         submitted.answer.trim()
-//           .length > 0;
-
-//       if (hasAnswer) {
-//         stats.answered++;
-
-//         stats.attemptedQuestionIds.push(
-//           question.id
-//         );
-//       }
-
-//       const gradedQuestion =
-//         gradedResults.find(
-//           (result) =>
-//             result.questionId ===
-//             question.id
-//         );
-
-//       if (
-//         gradedQuestion?.isCorrect
-//       ) {
-//         stats.correct++;
-//       }
-//     }
-
-//     /*
-//      * ========================================================
-//      * 17. BUILD NORMALIZED TOPIC RESULTS
-//      * ========================================================
-//      */
-
-//     const normalizedTopicResults =
-//       Array.from(
-//         topicStats.values()
-//       ).map((topic) => {
-//         const topicScore =
-//           topic.questions > 0
-//             ? Number(
-//                 (
-//                   (topic.correct /
-//                     topic.questions) *
-//                   100
-//                 ).toFixed(2)
-//               )
-//             : 0;
-
-//         const completionRate =
-//           topic.questions > 0
-//             ? Number(
-//                 (
-//                   (topic.answered /
-//                     topic.questions) *
-//                   100
-//                 ).toFixed(2)
-//               )
-//             : 0;
-
-//         return {
-//           id: topic.id,
-
-//           title: topic.title,
-
-//           questions:
-//             topic.questions,
-
-//           answered:
-//             topic.answered,
-
-//           correct:
-//             topic.correct,
-
-//           score:
-//             topicScore,
-
-//           completionRate,
-
-//           attemptedQuestionIds:
-//             topic.attemptedQuestionIds,
-//         };
-//       });
-
-//     /*
-//      * ========================================================
-//      * 18. TOPIC IDS
-//      * ========================================================
-//      */
-
-//     const topicIds =
-//       normalizedTopicResults.map(
-//         (topic) => topic.id
-//       );
-
-//     /*
-//      * ========================================================
-//      * 19. SHORT DATABASE TRANSACTION
-//      *
-//      * Only database persistence happens here.
-//      * ========================================================
-//      */
-
-//     const result =
-//       await db.$transaction(
-//         async (tx) => {
-//           /*
-//            * ==================================================
-//            * GET EXISTING STUDENT SCORE
-//            * ==================================================
-//            */
-
-//           const existingScore =
-//             await tx.studentScore.findUnique(
-//               {
-//                 where: {
-//                   studentId_subjectId_termId:
-//                     {
-//                       studentId:
-//                         normalizedStudentId,
-
-//                       subjectId,
-
-//                       termId,
-//                     },
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * PREVIOUS TEST VALUES
-//            * ==================================================
-//            */
-
-//           const previousCorrect =
-//             existingScore
-//               ?.testTotalCorrect ?? 0;
-
-//           const previousQuestions =
-//             existingScore
-//               ?.testTotalQuestions ?? 0;
-
-//           const previousTestCount =
-//             existingScore
-//               ?.testCount ?? 0;
-
-//           /*
-//            * ==================================================
-//            * NEW CUMULATIVE VALUES
-//            * ==================================================
-//            */
-
-//           const newTestCount =
-//             previousTestCount + 1;
-
-//           const newTotalCorrect =
-//             previousCorrect +
-//             correctCount;
-
-//           const newTotalQuestions =
-//             previousQuestions +
-//             totalQuestions;
-
-//           const newAverageScore =
-//             newTotalQuestions > 0
-//               ? Number(
-//                   (
-//                     (newTotalCorrect /
-//                       newTotalQuestions) *
-//                     100
-//                   ).toFixed(2)
-//                 )
-//               : 0;
-
-//           /*
-//            * ==================================================
-//            * LOWEST / HIGHEST TEST SCORE
-//            * ==================================================
-//            */
-
-//           const previousLowest =
-//             existingScore
-//               ?.testLowestScore;
-
-//           const previousHighest =
-//             existingScore
-//               ?.testHighestScore;
-
-//           const newLowest =
-//             previousLowest ===
-//               null ||
-//             previousLowest ===
-//               undefined
-//               ? score
-//               : Math.min(
-//                   previousLowest,
-//                   score
-//                 );
-
-//           const newHighest =
-//             previousHighest ===
-//               null ||
-//             previousHighest ===
-//               undefined
-//               ? score
-//               : Math.max(
-//                   previousHighest,
-//                   score
-//                 );
-
-//           /*
-//            * ==================================================
-//            * STUDENT SCORE UPSERT
-//            * ==================================================
-//            */
-
-//           const studentScore =
-//             await tx.studentScore.upsert(
-//               {
-//                 where: {
-//                   studentId_subjectId_termId:
-//                     {
-//                       studentId:
-//                         normalizedStudentId,
-
-//                       subjectId,
-
-//                       termId,
-//                     },
-//                 },
-
-//                 create: {
-//                   studentId:
-//                     normalizedStudentId,
-
-//                   subjectId,
-
-//                   termId,
-
-//                   testTotalCorrect:
-//                     correctCount,
-
-//                   testTotalQuestions:
-//                     totalQuestions,
-
-//                   testCount: 1,
-
-//                   testLowestScore:
-//                     score,
-
-//                   testHighestScore:
-//                     score,
-
-//                   testAverageScore:
-//                     score,
-
-//                   testTopics:
-//                     normalizedTopicResults,
-
-//                   noOfTopics:
-//                     normalizedTopicResults.length,
-//                 },
-
-//                 update: {
-//                   testTotalCorrect:
-//                     newTotalCorrect,
-
-//                   testTotalQuestions:
-//                     newTotalQuestions,
-
-//                   testCount:
-//                     newTestCount,
-
-//                   testLowestScore:
-//                     newLowest,
-
-//                   testHighestScore:
-//                     newHighest,
-
-//                   testAverageScore:
-//                     newAverageScore,
-
-//                   testTopics:
-//                     normalizedTopicResults,
-
-//                   noOfTopics:
-//                     normalizedTopicResults.length,
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * FETCH ALL EXISTING TOPIC ANALYTICS AT ONCE
-//            *
-//            * Previously this was one query per topic.
-//            * ==================================================
-//            */
-
-//           const existingAnalytics =
-//             await tx.topicAnalytics.findMany(
-//               {
-//                 where: {
-//                   studentId:
-//                     normalizedStudentId,
-
-//                   topicId: {
-//                     in: topicIds,
-//                   },
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * CREATE LOOKUP MAP
-//            * ==================================================
-//            */
-
-//           const analyticsMap =
-//             new Map(
-//               existingAnalytics.map(
-//                 (analytics) => [
-//                   analytics.topicId,
-//                   analytics,
-//                 ]
-//               )
-//             );
-
-//           /*
-//            * ==================================================
-//            * BUILD ANALYTICS OPERATIONS
-//            *
-//            * Everything is calculated before
-//            * the writes happen.
-//            * ==================================================
-//            */
-
-//           const analyticsOperations =
-//             normalizedTopicResults.map(
-//               (topic) => {
-//                 const existing =
-//                   analyticsMap.get(
-//                     topic.id
-//                   );
-
-//                 const previousQuestions =
-//                   existing
-//                     ?.totalQuestions ?? 0;
-
-//                 const previousCorrect =
-//                   existing
-//                     ?.totalCorrect ?? 0;
-
-//                 const previousTests =
-//                   existing
-//                     ?.testCount ?? 0;
-
-//                 /*
-//                  * Reconstruct answered questions
-//                  * from previous completion rate.
-//                  */
-
-//                 const previousAnswered =
-//                   existing &&
-//                   previousQuestions > 0
-//                     ? (
-//                         existing.completionRate /
-//                         100
-//                       ) *
-//                       previousQuestions
-//                     : 0;
-
-//                 const newQuestions =
-//                   previousQuestions +
-//                   topic.questions;
-
-//                 const newCorrect =
-//                   previousCorrect +
-//                   topic.correct;
-
-//                 const newAnswered =
-//                   previousAnswered +
-//                   topic.answered;
-
-//                 const newTestCount =
-//                   previousTests + 1;
-
-//                 const completionRate =
-//                   newQuestions > 0
-//                     ? Number(
-//                         (
-//                           (newAnswered /
-//                             newQuestions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 const averageScore =
-//                   newQuestions > 0
-//                     ? Number(
-//                         (
-//                           (newCorrect /
-//                             newQuestions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 const currentTopicScore =
-//                   topic.questions > 0
-//                     ? Number(
-//                         (
-//                           (topic.correct /
-//                             topic.questions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 const lowestScore =
-//                   existing?.lowestScore !==
-//                     null &&
-//                   existing?.lowestScore !==
-//                     undefined
-//                     ? Math.min(
-//                         existing.lowestScore,
-//                         currentTopicScore
-//                       )
-//                     : currentTopicScore;
-
-//                 const highestScore =
-//                   existing?.highestScore !==
-//                     null &&
-//                   existing?.highestScore !==
-//                     undefined
-//                     ? Math.max(
-//                         existing.highestScore,
-//                         currentTopicScore
-//                       )
-//                     : currentTopicScore;
-
-//                 const attemptedQuestionIds =
-//                   Array.from(
-//                     new Set([
-//                       ...(existing
-//                         ?.attemptedQuestionIds ??
-//                         []),
-
-//                       ...(topic
-//                         .attemptedQuestionIds ??
-//                         []),
-//                     ])
-//                   );
-
-//                 return {
-//                   topic,
-//                   existing,
-
-//                   completionRate,
-
-//                   averageScore,
-
-//                   currentTopicScore,
-
-//                   newQuestions,
-
-//                   newCorrect,
-
-//                   newTestCount,
-
-//                   attemptedQuestionIds,
-
-//                   lowestScore,
-
-//                   highestScore,
-//                 };
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * TOPIC ANALYTICS WRITES
-//            *
-//            * These are still inside the transaction,
-//            * but there are no preceding findUnique calls.
-//            * ==================================================
-//            */
-
-//           const topicAnalyticsResults =
-//             [];
-
-//           for (
-//             const item of
-//               analyticsOperations
-//           ) {
-//             const {
-//               topic,
-//               existing,
-
-//               completionRate,
-//               averageScore,
-//               currentTopicScore,
-
-//               newQuestions,
-//               newCorrect,
-//               newTestCount,
-
-//               attemptedQuestionIds,
-
-//               lowestScore,
-//               highestScore,
-//             } = item;
-
-//             const analytics =
-//               await tx.topicAnalytics.upsert(
-//                 {
-//                   where: {
-//                     studentId_topicId:
-//                       {
-//                         studentId:
-//                           normalizedStudentId,
-
-//                         topicId:
-//                           topic.id,
-//                       },
-//                   },
-
-//                   create: {
-//                     studentId:
-//                       normalizedStudentId,
-
-//                     topicId:
-//                       topic.id,
-
-//                     completionRate:
-//                       topic.completionRate,
-
-//                     averageScore:
-//                       currentTopicScore,
-
-//                     testCount: 1,
-
-//                     totalQuestions:
-//                       topic.questions,
-
-//                     totalCorrect:
-//                       topic.correct,
-
-//                     attemptedQuestionIds:
-//                       topic.attemptedQuestionIds,
-
-//                     lastScore:
-//                       currentTopicScore,
-
-//                     highestScore:
-//                       currentTopicScore,
-
-//                     lowestScore:
-//                       currentTopicScore,
-
-//                     lastAccessed:
-//                       new Date(),
-//                   },
-
-//                   update: {
-//                     completionRate,
-
-//                     averageScore,
-
-//                     testCount:
-//                       newTestCount,
-
-//                     totalQuestions:
-//                       newQuestions,
-
-//                     totalCorrect:
-//                       newCorrect,
-
-//                     attemptedQuestionIds,
-
-//                     lastScore:
-//                       currentTopicScore,
-
-//                     highestScore,
-
-//                     lowestScore,
-
-//                     lastAccessed:
-//                       new Date(),
-//                   },
-//                 }
-//               );
-
-//             topicAnalyticsResults.push(
-//               analytics
-//             );
-//           }
-
-//           return {
-//             studentScore,
-
-//             topicAnalytics:
-//               topicAnalyticsResults,
-//           };
-//         },
-
-//         {
-//           /*
-//            * Give the transaction a reasonable
-//            * safety margin after optimization.
-//            */
-//           timeout: 10000,
-
-//           /*
-//            * Maximum time Prisma waits to obtain
-//            * a transaction connection.
-//            */
-//           maxWait: 5000,
-//         }
-//       );
-
-//     /*
-//      * ========================================================
-//      * 20. RESPONSE
-//      * ========================================================
-//      */
-
-//     return res.status(200).json({
-//       success: true,
-
-//       message:
-//         "Test graded and saved successfully.",
-
-//       data: {
-//         studentScore:
-//           result.studentScore,
-
-//         topicAnalytics:
-//           result.topicAnalytics,
-
-//         test: {
-//           score,
-
-//           correct:
-//             correctCount,
-
-//           totalQuestions,
-
-//           percentage:
-//             score,
-
-//           termId,
-
-//           subjectId,
-
-//           noOfTopics:
-//             normalizedTopicResults.length,
-
-//           studentId:
-//             normalizedStudentId,
-
-//           results:
-//             gradedResults,
-
-//           topicResults:
-//             normalizedTopicResults,
-//         },
-//       },
-//     });
-//   } catch (error) {
-//     console.error(
-//       "[saveTestScore] Error:",
-//       error
-//     );
-
-//     return res.status(500).json({
-//       success: false,
-//       message:
-//         "Failed to grade and save test.",
-//     });
-//   }
-// }
-
-
 
 export async function saveExamScore(req, res) {
   try {
