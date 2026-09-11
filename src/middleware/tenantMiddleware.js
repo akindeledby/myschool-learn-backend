@@ -6,9 +6,7 @@ export async function tenantMiddleware(
   next
 ) {
   try {
-    // console.log(
-    //   "TENANT MIDDLEWARE START"
-    // );
+
     const subdomain =
       req.headers["x-school"];
 
@@ -43,11 +41,7 @@ export async function tenantMiddleware(
       subdomain:
         school.subdomain,
     };
-
-    // console.log(
-    //   "TENANT MIDDLEWARE END"
-    // );
-
+    
     next();
 
   } catch (error) {

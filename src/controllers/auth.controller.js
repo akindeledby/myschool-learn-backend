@@ -38,113 +38,401 @@ async function generateUniqueInvitationCode() {
 }
 
 // ===================== GOOGLE LOGIN =====================
+// ===================== GOOGLE AUTH =====================
+
 export async function googleAuth(req, res) {
   try {
-    // console.time("google-controller");
+    const {
+      email,
+      name,
+      googleId,
+    } = req.body;
 
-    const { email, name, googleId } = req.body;
-    const schoolId =
+    /*
+     * req.school is populated by tenantMiddleware.
+     *
+     * SCHOOL DOMAIN:
+     *     abc.myschoollearn.com
+     *     req.school?.id = ABC_ID
+     *
+     * PUBLIC DOMAIN:
+     *     myschoollearn.com
+     *     req.school = null
+     */
+
+    const domainSchoolId =
       req.school?.id || null;
+
+    // --------------------------------------------------
+    // Validate email
+    // --------------------------------------------------
 
     if (!email) {
       return res.status(400).json({
-        error: "Email required",
+        success: false,
+        error: "Email is required.",
       });
     }
 
-    let user = await db.user.findUnique({
-      where: { 
-        email,
-        schoolId
-       },
-    });
+    const cleanEmail =
+      email.trim().toLowerCase();
 
-    // ================= EXISTING USER =================
+    // --------------------------------------------------
+    // Find existing user
+    // --------------------------------------------------
+
+    let user;
+
+    if (domainSchoolId) {
+      /*
+       * SCHOOL TENANT LOGIN
+       *
+       * The subdomain is authoritative.
+       *
+       * The Google account must belong to this school.
+       */
+
+      user = await db.user.findFirst({
+        where: {
+          email: cleanEmail,
+          schoolId: domainSchoolId,
+        },
+      });
+    } else {
+      /*
+       * PUBLIC LOGIN
+       *
+       * Email is globally unique in User,
+       * so we can safely find the account by email.
+       */
+
+      user = await db.user.findUnique({
+        where: {
+          email: cleanEmail,
+        },
+      });
+    }
+
+    // ==================================================
+    // EXISTING USER
+    // ==================================================
+
     if (user) {
-      if (!user.googleId && googleId) {
-        user = await db.user.update({
-          where: { email },
-          data: { googleId },
-        });
+
+      // ------------------------------------------------
+      // Update Google ID if necessary
+      // ------------------------------------------------
+
+      if (
+        !user.googleId &&
+        googleId
+      ) {
+        user =
+          await db.user.update({
+            where: {
+              id: user.id,
+            },
+
+            data: {
+              googleId,
+            },
+          });
       }
 
-      // ✅ CREATE TOKEN ALWAYS
-      const accessToken = jwt.sign(
-        {
-          userId: user.id,
-          role: user.role ?? null,
-        },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "7d",
-        }
-      );
+      // ------------------------------------------------
+      // Create access token
+      // ------------------------------------------------
 
-      // 🚨 ROLE NOT YET SELECTED
+      const accessToken =
+        jwt.sign(
+          {
+            userId: user.id,
+            role: user.role ?? null,
+          },
+
+          process.env.JWT_SECRET,
+
+          {
+            expiresIn: "7d",
+          }
+        );
+
+      // ------------------------------------------------
+      // Role not selected yet
+      // ------------------------------------------------
+
       if (!user.role) {
         return res.json({
+          success: true,
+
+          requiresRoleSelection:
+            true,
+
+          accessToken,
+
           user: {
             id: user.id,
             email: user.email,
+            firstName:
+              user.firstName,
+            lastName:
+              user.lastName,
+            schoolId:
+              user.schoolId,
           },
-          success: true,
-          requiresRoleSelection: true,
-          accessToken,
         });
       }
 
-      // ✅ NORMAL LOGIN
+      // ------------------------------------------------
+      // Parent profile selection
+      // ------------------------------------------------
+
+      if (user.role === "PARENT") {
+        return res.json({
+          success: true,
+
+          requiresProfileSelection:
+            true,
+
+          accessToken,
+
+          user,
+        });
+      }
+
+      // ------------------------------------------------
+      // Normal login
+      // ------------------------------------------------
+
       return res.json({
         success: true,
+        message: "Login successful.",
         user,
         accessToken,
       });
     }
 
-    // ================= NEW USER =================
-    const newUser = await db.user.create({
-      data: {
-        email,
-        firstName: name?.split(" ")[0] || "Google",
-        lastName: name?.split(" ")[1] || "",
-        password: null,
-        role: null,
-        googleId: googleId || null,
-        schoolId: schoolId
-      },
-    });
+    // ==================================================
+    // NEW USER
+    // ==================================================
 
-    const accessToken = jwt.sign(
-      {
-        userId: newUser.id,
-        role: null,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
+    /*
+     * If this request came through a school subdomain,
+     * the new Google user automatically belongs to
+     * that school.
+     *
+     * If this is the public domain, schoolId is null.
+     */
 
+    const nameParts =
+      typeof name === "string"
+        ? name.trim().split(/\s+/)
+        : [];
 
-    return res.json({
+    const firstName =
+      nameParts[0] || "Google";
+
+    const lastName =
+      nameParts.slice(1).join(" ") || "";
+
+    const newUser =
+      await db.user.create({
+        data: {
+          email: cleanEmail,
+
+          firstName,
+
+          lastName,
+
+          /*
+           * Google users do not use a local password.
+           */
+          password: null,
+
+          /*
+           * Role is selected after authentication.
+           */
+          role: null,
+
+          googleId:
+            googleId || null,
+
+          /*
+           * IMPORTANT:
+           *
+           * School subdomain → actual school ID
+           * Public domain    → null
+           */
+          schoolId:
+            domainSchoolId,
+        },
+      });
+
+    // --------------------------------------------------
+    // Create access token
+    // --------------------------------------------------
+
+    const accessToken =
+      jwt.sign(
+        {
+          userId: newUser.id,
+          role: null,
+        },
+
+        process.env.JWT_SECRET,
+
+        {
+          expiresIn: "7d",
+        }
+      );
+
+    // --------------------------------------------------
+    // Response
+    // --------------------------------------------------
+
+    return res.status(201).json({
       success: true,
-      requiresRoleSelection: true,
+
+      requiresRoleSelection:
+        true,
+
+      accessToken,
+
       user: {
         id: newUser.id,
         email: newUser.email,
+        firstName:
+          newUser.firstName,
+        lastName:
+          newUser.lastName,
+        schoolId:
+          newUser.schoolId,
       },
-      accessToken,
     });
 
-
   } catch (error) {
-    console.error("GOOGLE BACKEND ERROR:", error);
+
+    console.error(
+      "GOOGLE BACKEND ERROR:",
+      error
+    );
 
     return res.status(500).json({
-      error: error.message,
+      success: false,
+      error:
+        "Unable to authenticate with Google. Please try again later.",
     });
   }
 }
+
+
+// export async function googleAuth(req, res) {
+//   try {
+
+//     const { email, name, googleId } = req.body;
+//     const schoolId =
+//       req.school?.id || null;
+
+//     if (!email) {
+//       return res.status(400).json({
+//         error: "Email required",
+//       });
+//     }
+
+//     let user = await db.user.findUnique({
+//       where: { 
+//         email,
+//         schoolId
+//        },
+//     });
+
+//     // ================= EXISTING USER =================
+//     if (user) {
+//       if (!user.googleId && googleId) {
+//         user = await db.user.update({
+//           where: { email },
+//           data: { googleId },
+//         });
+//       }
+
+//       // ✅ CREATE TOKEN ALWAYS
+//       const accessToken = jwt.sign(
+//         {
+//           userId: user.id,
+//           role: user.role ?? null,
+//         },
+//         process.env.JWT_SECRET,
+//         {
+//           expiresIn: "7d",
+//         }
+//       );
+
+//       // 🚨 ROLE NOT YET SELECTED
+//       if (!user.role) {
+//         return res.json({
+//           user: {
+//             id: user.id,
+//             email: user.email,
+//           },
+//           success: true,
+//           requiresRoleSelection: true,
+//           accessToken,
+//         });
+//       }
+
+//       // ✅ NORMAL LOGIN
+//       return res.json({
+//         success: true,
+//         user,
+//         accessToken,
+//       });
+//     }
+
+//     // ================= NEW USER =================
+//     const newUser = await db.user.create({
+//       data: {
+//         email,
+//         firstName: name?.split(" ")[0] || "Google",
+//         lastName: name?.split(" ")[1] || "",
+//         password: null,
+//         role: null,
+//         googleId: googleId || null,
+//         schoolId: schoolId
+//       },
+//     });
+
+//     const accessToken = jwt.sign(
+//       {
+//         userId: newUser.id,
+//         role: null,
+//       },
+//       process.env.JWT_SECRET,
+//       {
+//         expiresIn: "7d",
+//       }
+//     );
+
+
+//     return res.json({
+//       success: true,
+//       requiresRoleSelection: true,
+//       user: {
+//         id: newUser.id,
+//         email: newUser.email,
+//       },
+//       accessToken,
+//     });
+
+
+//   } catch (error) {
+//     console.error("GOOGLE BACKEND ERROR:", error);
+
+//     return res.status(500).json({
+//       error: error.message,
+//     });
+//   }
+// }
+
 
 // ===================== REGISTER =====================
 export async function register(req, res) {
@@ -155,11 +443,41 @@ export async function register(req, res) {
       email,
       password,
       invitationCode,
+      schoolId: selectedSchoolId,
     } = req.body;
 
+    /*
+     * IMPORTANT:
+     *
+     * req.school is populated by tenantMiddleware.
+     *
+     * If the request comes from:
+     *
+     *     abc.myschoollearn.com
+     *
+     * then:
+     *
+     *     req.school.id
+     *
+     * is the authoritative school.
+     *
+     * If the request comes from:
+     *
+     *     myschoollearn.com
+     *
+     * then:
+     *
+     *     req.school === null
+     *
+     * and the frontend-selected schoolId or invitation
+     * code may be used as a fallback.
+     */
 
-    const schoolId =
-      req.school?.id || null;
+    const domainSchoolId = req.school?.id || null;
+
+    // --------------------------------------------------
+    // Validate required fields
+    // --------------------------------------------------
 
     if (
       !firstName ||
@@ -168,17 +486,14 @@ export async function register(req, res) {
       !password
     ) {
       return res.status(400).json({
+        success: false,
         error: "All required fields must be provided.",
       });
     }
 
-
     const cleanFirstName = firstName.trim();
-
     const cleanLastName = lastName.trim();
-
     const cleanEmail = email.trim().toLowerCase();
-
     const cleanPassword = password.trim();
 
     const cleanInvitationCode =
@@ -186,243 +501,510 @@ export async function register(req, res) {
         ? invitationCode.trim().toUpperCase()
         : "";
 
-    const existingUser =
-      await db.user.findFirst({
-        where: {
-          email: cleanEmail,
-          ...(schoolId
-            ? { schoolId }
-            : {}),
-        },
-        select: {
-          id: true,
-          email: true,
-        },
-      });
+    // --------------------------------------------------
+    // Validate password
+    // --------------------------------------------------
 
-    if (existingUser) {
+    if (cleanPassword.length < 6) {
       return res.status(400).json({
-        error:
-          "An account with this email already exists.",
+        success: false,
+        error: "Password must be at least 6 characters long.",
       });
     }
 
+    // --------------------------------------------------
+    // Resolve school
+    // --------------------------------------------------
 
-    let invitedById = null;
+    let effectiveSchoolId = domainSchoolId;
+    let invitingUser = null;
+
+    /*
+     * If we are NOT inside a school subdomain,
+     * a frontend-selected school may be used.
+     *
+     * However, we NEVER trust the frontend blindly.
+     */
+
+    if (!domainSchoolId && selectedSchoolId) {
+      const selectedSchool = await db.school.findUnique({
+        where: {
+          id: selectedSchoolId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!selectedSchool) {
+        return res.status(400).json({
+          success: false,
+          error: "Selected school does not exist.",
+        });
+      }
+
+      effectiveSchoolId = selectedSchool.id;
+    }
+
+    // --------------------------------------------------
+    // Validate invitation code
+    // --------------------------------------------------
 
     if (cleanInvitationCode) {
-      const invitingUser =
-        await db.user.findFirst({
-          where: {
-            invitationCode: cleanInvitationCode,
-          },
-          select: {
-            id: true,
-            invitationCode: true,
-          },
-        });
+      invitingUser = await db.user.findFirst({
+        where: {
+          invitationCode: cleanInvitationCode,
+        },
+        select: {
+          id: true,
+          schoolId: true,
+          invitationCode: true,
+        },
+      });
 
       if (!invitingUser) {
         return res.status(400).json({
+          success: false,
           error:
             "The invitation code is invalid or no longer available.",
         });
       }
 
-      invitedById =
-        invitingUser.id;
+      /*
+       * SUBDOMAIN USER
+       *
+       * The school determined from the domain is authoritative.
+       *
+       * Therefore, an invitation code belonging to another
+       * school cannot be used to establish a different
+       * school relationship.
+       */
+
+      if (
+        domainSchoolId &&
+        invitingUser.schoolId &&
+        invitingUser.schoolId !== domainSchoolId
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "This invitation code does not belong to this school.",
+        });
+      }
+
+      /*
+       * PUBLIC USER
+       *
+       * If there is no domain school and the invitation
+       * belongs to a school, the invitation establishes
+       * the user's school relationship.
+       */
+
+      if (!domainSchoolId && invitingUser.schoolId) {
+        effectiveSchoolId = invitingUser.schoolId;
+      }
+
+      /*
+       * If both a frontend schoolId and invitation school
+       * exist on the public domain, they must agree.
+       */
+
+      if (
+        !domainSchoolId &&
+        selectedSchoolId &&
+        invitingUser.schoolId &&
+        selectedSchoolId !== invitingUser.schoolId
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "The selected school does not match the invitation code.",
+        });
+      }
     }
 
-    const hashedPassword =
-      await bcrypt.hash(
-        cleanPassword,
-        10
-      );
+    // --------------------------------------------------
+    // Check existing user
+    // --------------------------------------------------
+
+    /*
+     * On a school subdomain, search within that school.
+     *
+     * On the public domain, we search by email.
+     *
+     * This is important because a user may already belong
+     * to a school even though they are registering from
+     * the public domain.
+     */
+
+    const existingUsers = await db.user.findMany({
+      where: {
+        email: cleanEmail,
+        ...(effectiveSchoolId
+          ? {
+              schoolId: effectiveSchoolId,
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        schoolId: true,
+      },
+      take: 2,
+    });
+
+    if (existingUsers.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "An account with this email already exists.",
+      });
+    }
+
+    // --------------------------------------------------
+    // Hash password
+    // --------------------------------------------------
+
+    const hashedPassword = await bcrypt.hash(
+      cleanPassword,
+      10
+    );
+
+    // --------------------------------------------------
+    // Generate invitation code
+    // --------------------------------------------------
 
     const newInvitationCode =
       await generateUniqueInvitationCode();
 
-    const user =
-      await db.user.create({
-        data: {
-          firstName: cleanFirstName,
-          lastName: cleanLastName,
-          email: cleanEmail,
-          password: hashedPassword,
-          role: null,
-          schoolId,
-          invitationCode: newInvitationCode,
-          invitationCreatedAt: new Date(),
-          invitedById: invitedById,
-          invitedAt:
-            invitedById
-              ? new Date()
-              : null,
-        },
+    // --------------------------------------------------
+    // Create user
+    // --------------------------------------------------
 
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          invitationCode: true,
-          invitedById: true,
-          createdAt: true,
-        },
-      });
+    const user = await db.user.create({
+      data: {
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
+        email: cleanEmail,
+        password: hashedPassword,
 
+        // Role is selected after registration.
+        role: null,
 
-    // ========================================================
-    // GENERATE JWT
-    // ========================================================
+        /*
+         * This is the resolved tenant.
+         *
+         * Subdomain school takes precedence.
+         *
+         * Otherwise:
+         * selectedSchoolId / invitation school may be used.
+         *
+         * Otherwise null for a genuinely public user.
+         */
+        schoolId: effectiveSchoolId,
 
-    const accessToken =
-      jwt.sign(
-        {
-          userId: user.id,
-          role: user.role ?? null,
-        },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "7d",
-        }
-      );
+        invitationCode: newInvitationCode,
+        invitationCreatedAt: new Date(),
 
+        invitedById: invitingUser?.id || null,
 
-    // ========================================================
-    // RESPONSE
-    // ========================================================
-
-    return res.status(201).json({
-      message: "Account created successfully.",
-      requiresRoleSelection: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        invitationCode: user.invitationCode,
-        invitedById: user.invitedById,
+        invitedAt: invitingUser
+          ? new Date()
+          : null,
       },
 
-      accessToken,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        schoolId: true,
+        invitationCode: true,
+        invitedById: true,
+        createdAt: true,
+      },
     });
 
-  } catch (error) {
-
-    console.error(
-      "REGISTER ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      error:
-        "Unable to create account. Please try again later.",
-    });
-  }
-}
-
-// ===================== LOGIN =====================
-export async function login(req, res) {
-  try {
-    const { email, password } = req.body;
-
-    const schoolId =
-      req.school?.id || null;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        error:
-          "Email and password are required",
-      });
-    }
-
-    const passwordTrim = password.trim();
-
-    const user =
-      await db.user.findFirst({
-        where: {
-          email: email.trim(),
-          schoolId,
-        },
-      });
-
-    if (!user) {
-      return res.status(404).json({
-        error: "User not found",
-      });
-    }
-
-    if (!user.password) {
-      return res.status(400).json({
-        error:
-          "This account uses Google. Please sign in with Google.",
-      });
-    }
-
-    const isValid =
-      await bcrypt.compare(
-        passwordTrim,
-        user.password
-      );
-
-    if (!isValid) {
-      return res.status(401).json({
-        error:
-          "Invalid credentials",
-      });
-    }
+    // --------------------------------------------------
+    // Create JWT
+    // --------------------------------------------------
 
     const accessToken = jwt.sign(
       {
         userId: user.id,
         role: user.role ?? null,
       },
-        process.env.JWT_SECRET,
+      process.env.JWT_SECRET,
       {
         expiresIn: "7d",
       }
     );
 
-    // User has not selected role yet
-    if (!user.role) {
-      return res.json({
-        requiresRoleSelection: true,
-        accessToken,
-        user: {
-          id: user.id,
-          email: user.email,
+    // --------------------------------------------------
+    // Response
+    // --------------------------------------------------
+
+    return res.status(201).json({
+      success: true,
+      message: "Account created successfully.",
+
+      requiresRoleSelection: true,
+
+      accessToken,
+
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        schoolId: user.schoolId,
+        invitationCode: user.invitationCode,
+        invitedById: user.invitedById,
+      },
+    });
+  } catch (error) {
+    console.error("REGISTER ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      error:
+        "Unable to create account. Please try again later.",
+    });
+  }
+}
+
+
+// ===================== LOGIN =====================
+
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    /*
+     * req.school comes from tenantMiddleware.
+     *
+     * On:
+     *
+     *     abc.myschoollearn.com
+     *
+     * req.school?.id is the authoritative tenant.
+     *
+     * On:
+     *
+     *     myschoollearn.com
+     *
+     * req.school is null.
+     */
+
+    const domainSchoolId = req.school?.id || null;
+
+    // --------------------------------------------------
+    // Validate input
+    // --------------------------------------------------
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: "Email and password are required.",
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    // --------------------------------------------------
+    // Find user
+    // --------------------------------------------------
+
+    let user;
+
+    if (domainSchoolId) {
+      /*
+       * SCHOOL TENANT LOGIN
+       *
+       * The school subdomain is authoritative.
+       *
+       * A user belonging to another school cannot log into
+       * this school's tenant simply by knowing their email.
+       */
+
+      user = await db.user.findFirst({
+        where: {
+          email: cleanEmail,
+          schoolId: domainSchoolId,
+        },
+      });
+    } else {
+      /*
+       * PUBLIC LOGIN
+       *
+       * Search by email.
+       *
+       * This allows:
+       *
+       * 1. Public users with schoolId = null
+       * 2. Students belonging to schools
+       * 3. Parents belonging to schools
+       * 4. Teachers belonging to schools
+       *
+       * to authenticate from the public domain.
+       *
+       * If User.email is globally unique, this returns
+       * exactly one user.
+       */
+
+      user = await db.user.findFirst({
+        where: {
+          email: cleanEmail,
         },
       });
     }
 
-    // Parent must select profile
+    // --------------------------------------------------
+    // User not found
+    // --------------------------------------------------
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found.",
+      });
+    }
+
+    // --------------------------------------------------
+    // Google account
+    // --------------------------------------------------
+
+    if (!user.password) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "This account uses Google. Please sign in with Google.",
+      });
+    }
+
+    // --------------------------------------------------
+    // Verify password
+    // --------------------------------------------------
+
+    const isValid = await bcrypt.compare(
+      cleanPassword,
+      user.password
+    );
+
+    if (!isValid) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid credentials.",
+      });
+    }
+
+    // --------------------------------------------------
+    // Create JWT
+    // --------------------------------------------------
+
+    const accessToken = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role ?? null,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // --------------------------------------------------
+    // Role has not been selected
+    // --------------------------------------------------
+
+    if (!user.role) {
+      return res.json({
+        success: true,
+        requiresRoleSelection: true,
+        accessToken,
+
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          schoolId: user.schoolId,
+        },
+      });
+    }
+
+    // --------------------------------------------------
+    // Parent requires profile selection
+    // --------------------------------------------------
+
     if (user.role === "PARENT") {
       return res.json({
+        success: true,
         requiresProfileSelection: true,
         accessToken,
         user,
       });
     }
 
+    // --------------------------------------------------
+    // Normal login
+    // --------------------------------------------------
+
     return res.json({
-      message:
-        "Login successful",
+      success: true,
+      message: "Login successful.",
       accessToken,
       user,
     });
   } catch (error) {
+    console.error("LOGIN ERROR:", error);
+
     return res.status(500).json({
-      error: error.message,
+      success: false,
+      error:
+        "Unable to login. Please try again later.",
     });
   }
 }
 
 
-// ===================== SET-USER-ROLE =====================
+// ===================== SET USER ROLE =====================
+
 export async function setUserRole(req, res) {
   try {
-    const domainSchoolId = req.school?.id || null;
+    const userId = req.user?.userId;
+
+    // --------------------------------------------------
+    // Authentication
+    // --------------------------------------------------
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: "Authentication required.",
+      });
+    }
+
+    /*
+     * This is the school resolved by tenantMiddleware.
+     *
+     * If the user is visiting:
+     *
+     *     abc.myschoollearn.com
+     *
+     * then this is the authoritative school.
+     *
+     * The frontend cannot override it.
+     */
+
+    const domainSchoolId =
+      req.school?.id || null;
+
+    // --------------------------------------------------
+    // Request body
+    // --------------------------------------------------
 
     const {
       role,
@@ -439,11 +1021,14 @@ export async function setUserRole(req, res) {
       schoolName,
     } = req.body;
 
-    const effectiveSchoolId = selectedSchoolId || domainSchoolId || null;
+    // --------------------------------------------------
+    // Validate role
+    // --------------------------------------------------
 
     if (!role) {
       return res.status(400).json({
-        error: "Role is required",
+        success: false,
+        error: "Role is required.",
       });
     }
 
@@ -456,14 +1041,19 @@ export async function setUserRole(req, res) {
 
     if (!validRoles.includes(role)) {
       return res.status(400).json({
-        error: "Invalid role selected",
+        success: false,
+        error: "Invalid role selected.",
       });
     }
+
+    // --------------------------------------------------
+    // Get existing user
+    // --------------------------------------------------
 
     const existingUser =
       await db.user.findUnique({
         where: {
-          id: req.user.userId,
+          id: userId,
         },
         include: {
           teacher: true,
@@ -476,138 +1066,249 @@ export async function setUserRole(req, res) {
 
     if (!existingUser) {
       return res.status(404).json({
-        error: "User not found",
+        success: false,
+        error: "User not found.",
       });
     }
 
-    let schoolRecord = null;
+    // --------------------------------------------------
+    // Resolve school
+    // --------------------------------------------------
 
-    if (effectiveSchoolId) {
-      schoolRecord = await db.school.findUnique({
-        where: {
-          id: effectiveSchoolId,
-        },
-      });
+    let effectiveSchoolId = null;
 
-      if (!schoolRecord) {
+    /*
+     * RULE 1
+     *
+     * If the request comes through a school subdomain,
+     * that school is authoritative.
+     */
+
+    if (domainSchoolId) {
+      const domainSchool =
+        await db.school.findUnique({
+          where: {
+            id: domainSchoolId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!domainSchool) {
         return res.status(400).json({
+          success: false,
+          error:
+            "School associated with this domain does not exist.",
+        });
+      }
+
+      effectiveSchoolId = domainSchool.id;
+    }
+
+    /*
+     * RULE 2
+     *
+     * If there is no school subdomain, a frontend-selected
+     * school may be used as a fallback.
+     */
+
+    else if (selectedSchoolId) {
+      const selectedSchool =
+        await db.school.findUnique({
+          where: {
+            id: selectedSchoolId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!selectedSchool) {
+        return res.status(400).json({
+          success: false,
           error: "Selected school does not exist.",
         });
       }
+
+      effectiveSchoolId = selectedSchool.id;
     }
 
-    async function createAccountWithFreemium(
-      tx,
-      accountType,
-      subscriptionPlanName
-    ) {
-      const account =
-        await tx.account.create({
-          data: {
-            accountType,
-          },
-        });
-
-      const freemiumPlan =
-        await tx.subscriptionPlan.findUnique({
-          where: {
-            subscriptionPlanName,
-          },
-        });
-
-      if (!freemiumPlan) {
-        throw new Error(
-          `${subscriptionPlanName} plan not found`
-        );
-      }
-
-      await tx.subscription.create({
-        data: {
-          account: {
-            connect: {
-              id: account.id,
-            },
-          },
-          subscriptionPlan: {
-            connect: {
-              id: freemiumPlan.id,
-            },
-          },
-          status: "ACTIVE",
-          duration: "LIFETIME",
-          startsAt: new Date(),
-          endsAt: null,
-          numberOfTerms: 0,
-          amountPaid: 0,
-        },
-      });
-
-      return account;
-    }
+    // --------------------------------------------------
+    // TRANSACTION
+    // --------------------------------------------------
 
     const result = await db.$transaction(
       async (tx) => {
-        /**
-         * SCHOOL ROLE
-         */
-        if (role === "school") {
-          let account = existingUser.account;
 
-          if (!account) {
-            account = await createAccountWithFreemium(
-              tx,
-              "SCHOOL",
-              "FREEMIUM_SCHOOL"
+        // ==================================================
+        // SCHOOL
+        // ==================================================
+
+        if (role === "school") {
+
+          if (!schoolName?.trim()) {
+            throw new Error(
+              "School name is required."
             );
           }
 
-          const school = await tx.school.upsert({
-            where: {
-              schoolEmail: schoolEmail.trim(),
-            },
+          if (!schoolEmail?.trim()) {
+            throw new Error(
+              "School email is required."
+            );
+          }
 
-            update: {
-              name: schoolName.trim(),
-              schoolPhoneContact:
-                schoolPhoneContact?.trim() || phoneNumber,
-              userId: existingUser.id,
-            },
+          /*
+           * A school account is normally created from
+           * the public MySchoolLearn domain because the
+           * school itself is what creates the tenant.
+           *
+           * If this request is already inside a school
+           * tenant, we use that existing school instead
+           * of creating another school accidentally.
+           */
 
-            create: {
-              name: schoolName.trim(),
-              schoolEmail: schoolEmail.trim(),
-              schoolPhoneContact:
-                schoolPhoneContact?.trim() || phoneNumber,
-              userId: existingUser.id,
-            },
-          });
+          let account = existingUser.account;
 
-          const updatedUser = await tx.user.update({
-            where: {
-              id: existingUser.id,
-            },
+          if (!account) {
+            account =
+              await createAccountWithFreemium(
+                tx,
+                "SCHOOL",
+                "FREEMIUM_SCHOOL"
+              );
+          }
 
-            data: {
-              role: "SCHOOL",
-              accountId: account.id,
-              schoolId: school.id,
-            },
-          });
+          let school;
+
+          if (domainSchoolId) {
+
+            /*
+             * Existing tenant.
+             *
+             * Do not let frontend schoolId change it.
+             */
+
+            school =
+              await tx.school.findUnique({
+                where: {
+                  id: domainSchoolId,
+                },
+              });
+
+            if (!school) {
+              throw new Error(
+                "School associated with this domain does not exist."
+              );
+            }
+
+            /*
+             * If the school already belongs to another
+             * user, don't silently take ownership.
+             */
+
+            if (
+              school.userId &&
+              school.userId !== existingUser.id
+            ) {
+              throw new Error(
+                "This school already has an administrator."
+              );
+            }
+
+            school =
+              await tx.school.update({
+                where: {
+                  id: school.id,
+                },
+                data: {
+                  name: schoolName.trim(),
+                  schoolEmail:
+                    schoolEmail.trim(),
+                  schoolPhoneContact:
+                    schoolPhoneContact?.trim() ||
+                    phoneNumber ||
+                    null,
+                  userId: existingUser.id,
+                },
+              });
+          }
+
+          else {
+
+            /*
+             * PUBLIC SCHOOL REGISTRATION
+             *
+             * The school does not yet have a tenant
+             * subdomain, so create/upsert it using the
+             * supplied school email.
+             */
+
+            school =
+              await tx.school.upsert({
+                where: {
+                  schoolEmail:
+                    schoolEmail.trim(),
+                },
+
+                update: {
+                  name: schoolName.trim(),
+                  schoolPhoneContact:
+                    schoolPhoneContact?.trim() ||
+                    phoneNumber ||
+                    null,
+                  userId: existingUser.id,
+                },
+
+                create: {
+                  name: schoolName.trim(),
+                  schoolEmail:
+                    schoolEmail.trim(),
+                  schoolPhoneContact:
+                    schoolPhoneContact?.trim() ||
+                    phoneNumber ||
+                    null,
+                  userId: existingUser.id,
+                },
+              });
+          }
+
+          const updatedUser =
+            await tx.user.update({
+              where: {
+                id: existingUser.id,
+              },
+
+              data: {
+                role: "SCHOOL",
+                accountId: account.id,
+
+                /*
+                 * The school itself becomes the user's
+                 * school relationship.
+                 */
+                schoolId: school.id,
+              },
+            });
 
           return {
             user: updatedUser,
             profile: school,
-            redirectUrl: "/school/dashboard",
+            redirectUrl:
+              "/school/dashboard",
           };
         }
 
-        /**
-         * TEACHER ROLE
-         */
+        // ==================================================
+        // TEACHER
+        // ==================================================
+
         if (role === "teacher") {
+
           if (existingUser.teacher) {
             throw new Error(
-              "Teacher profile already exists"
+              "Teacher profile already exists."
             );
           }
 
@@ -616,33 +1317,33 @@ export async function setUserRole(req, res) {
               where: {
                 id: existingUser.id,
               },
+
               data: {
                 role: "TEACHER",
                 schoolId:
-                  schoolRecord?.id ||
-                  null,
+                  effectiveSchoolId,
               },
             });
 
           const teacher =
             await tx.teacher.create({
               data: {
-                userId:
-                  existingUser.id,
+                userId: existingUser.id,
+
                 schoolId:
-                  schoolRecord?.id ||
-                  null,
+                  effectiveSchoolId,
+
                 gender:
                   gender || null,
+
                 teacherCode:
-                  teacherCode ||
-                  null,
+                  teacherCode || null,
+
                 subject:
-                  subjectTaught ||
-                  null,
+                  subjectTaught || null,
+
                 phone:
-                  phoneNumber ||
-                  null,
+                  phoneNumber || null,
               },
             });
 
@@ -654,13 +1355,15 @@ export async function setUserRole(req, res) {
           };
         }
 
-        /**
-         * STUDENT ROLE
-         */
+        // ==================================================
+        // STUDENT
+        // ==================================================
+
         if (role === "student") {
+
           if (existingUser.student) {
             throw new Error(
-              "Student profile already exists"
+              "Student profile already exists."
             );
           }
 
@@ -676,10 +1379,15 @@ export async function setUserRole(req, res) {
               );
           }
 
+          // ----------------------------------------------
+          // Resolve class
+          // ----------------------------------------------
+
           let classRecord = null;
           let classLevel = null;
 
           if (classId) {
+
             classRecord =
               await tx.class.findUnique({
                 where: {
@@ -689,7 +1397,7 @@ export async function setUserRole(req, res) {
 
             if (!classRecord) {
               throw new Error(
-                "Selected class not found"
+                "Selected class not found."
               );
             }
 
@@ -699,45 +1407,66 @@ export async function setUserRole(req, res) {
               null;
           }
 
+          // ----------------------------------------------
+          // Update User
+          // ----------------------------------------------
+
           const updatedUser =
             await tx.user.update({
               where: {
                 id: existingUser.id,
               },
+
               data: {
                 role: "STUDENT",
-                accountId:
-                  account.id,
+                accountId: account.id,
                 schoolId:
-                  schoolRecord?.id ||
-                  null,
+                  effectiveSchoolId,
               },
             });
+
+          // ----------------------------------------------
+          // Create Student
+          // ----------------------------------------------
 
           const student =
             await tx.student.create({
               data: {
                 userId:
                   existingUser.id,
+
                 accountId:
                   account.id,
-                schoolId: schoolRecord?.id || null,
+
+                schoolId:
+                  effectiveSchoolId,
+
                 firstName:
                   existingUser.firstName,
+
                 lastName:
                   existingUser.lastName,
+
                 gender:
                   gender || null,
-                age: age
-                  ? Number(age)
-                  : null,
+
+                age:
+                  age !== undefined &&
+                  age !== null &&
+                  age !== ""
+                    ? Number(age)
+                    : null,
+
                 classId:
                   classRecord?.id ||
                   null,
+
                 classLevel,
+
                 category:
                   studentCategory ||
                   null,
+
                 phone:
                   phoneNumber ||
                   null,
@@ -747,20 +1476,21 @@ export async function setUserRole(req, res) {
           return {
             user: updatedUser,
             profile: student,
-            studentId:
-              student.id,
+            studentId: student.id,
             redirectUrl:
               "/student/dashboard",
           };
         }
 
-        /**
-         * PARENT ROLE
-         */
+        // ==================================================
+        // PARENT
+        // ==================================================
+
         if (role === "parent") {
+
           if (existingUser.parent) {
             throw new Error(
-              "Parent profile already exists"
+              "Parent profile already exists."
             );
           }
 
@@ -781,16 +1511,15 @@ export async function setUserRole(req, res) {
               where: {
                 id: existingUser.id,
               },
+
               data: {
                 role: "PARENT",
-                accountId:
-                  account.id,
+                accountId: account.id,
                 phone:
-                  phoneNumber ||
-                  null,
+                  phoneNumber || null,
+
                 schoolId:
-                  schoolRecord?.id ||
-                  null,
+                  effectiveSchoolId,
               },
             });
 
@@ -799,14 +1528,16 @@ export async function setUserRole(req, res) {
               data: {
                 userId:
                   existingUser.id,
+
                 schoolId:
-                  schoolRecord?.id ||
-                  null,
+                  effectiveSchoolId,
+
                 phone:
-                  phoneNumber ||
-                  null,
+                  phoneNumber || null,
+
                 firstName:
                   existingUser.firstName,
+
                 lastName:
                   existingUser.lastName,
               },
@@ -821,28 +1552,820 @@ export async function setUserRole(req, res) {
         }
 
         throw new Error(
-          "Unable to process role"
+          "Unable to process role."
         );
       }
     );
 
+    // --------------------------------------------------
+    // SUCCESS
+    // --------------------------------------------------
+
     return res.status(200).json({
       success: true,
-      message: "Profile setup completed successfully",
-      redirectUrl: result.redirectUrl,
-      user: result.user,
-      profile: result.profile,
-      studentId: result.studentId || null,
-    });
-  } catch (error) {
-    console.error(error);
 
-    return res.status(500).json({
+      message:
+        "Profile setup completed successfully.",
+
+      redirectUrl:
+        result.redirectUrl,
+
+      user:
+        result.user,
+
+      profile:
+        result.profile,
+
+      studentId:
+        result.studentId ||
+        null,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "SET USER ROLE ERROR:",
+      error
+    );
+
+    /*
+     * Most errors thrown inside the transaction above
+     * are business validation errors.
+     *
+     * Return a 400 rather than making them appear as
+     * unexpected server failures.
+     */
+
+    return res.status(400).json({
       success: false,
-      error: error.message,
+      error:
+        error?.message ||
+        "Failed to complete profile setup.",
     });
   }
 }
+
+
+// ======================================================
+// HELPER
+// ======================================================
+
+async function createAccountWithFreemium(
+  tx,
+  accountType,
+  subscriptionPlanName
+) {
+  const account =
+    await tx.account.create({
+      data: {
+        accountType,
+      },
+    });
+
+  const freemiumPlan =
+    await tx.subscriptionPlan.findUnique({
+      where: {
+        subscriptionPlanName,
+      },
+    });
+
+  if (!freemiumPlan) {
+    throw new Error(
+      `${subscriptionPlanName} plan not found.`
+    );
+  }
+
+  await tx.subscription.create({
+    data: {
+      account: {
+        connect: {
+          id: account.id,
+        },
+      },
+
+      subscriptionPlan: {
+        connect: {
+          id: freemiumPlan.id,
+        },
+      },
+
+      status: "ACTIVE",
+
+      duration: "LIFETIME",
+
+      startsAt: new Date(),
+
+      endsAt: null,
+
+      numberOfTerms: 0,
+
+      amountPaid: 0,
+    },
+  });
+
+  return account;
+}
+
+
+// ===================== REGISTER =====================
+// export async function register(req, res) {
+//   try {
+//     const {
+//       firstName,
+//       lastName,
+//       email,
+//       password,
+//       invitationCode,
+//     } = req.body;
+
+
+//     const schoolId =
+//       req.school?.id || null;
+
+//     if (
+//       !firstName ||
+//       !lastName ||
+//       !email ||
+//       !password
+//     ) {
+//       return res.status(400).json({
+//         error: "All required fields must be provided.",
+//       });
+//     }
+
+
+//     const cleanFirstName = firstName.trim();
+
+//     const cleanLastName = lastName.trim();
+
+//     const cleanEmail = email.trim().toLowerCase();
+
+//     const cleanPassword = password.trim();
+
+//     const cleanInvitationCode =
+//       typeof invitationCode === "string"
+//         ? invitationCode.trim().toUpperCase()
+//         : "";
+
+//     const existingUser =
+//       await db.user.findFirst({
+//         where: {
+//           email: cleanEmail,
+//           ...(schoolId
+//             ? { schoolId }
+//             : {}),
+//         },
+//         select: {
+//           id: true,
+//           email: true,
+//         },
+//       });
+
+//     if (existingUser) {
+//       return res.status(400).json({
+//         error:
+//           "An account with this email already exists.",
+//       });
+//     }
+
+
+//     let invitedById = null;
+
+//     if (cleanInvitationCode) {
+//       const invitingUser =
+//         await db.user.findFirst({
+//           where: {
+//             invitationCode: cleanInvitationCode,
+//           },
+//           select: {
+//             id: true,
+//             invitationCode: true,
+//           },
+//         });
+
+//       if (!invitingUser) {
+//         return res.status(400).json({
+//           error:
+//             "The invitation code is invalid or no longer available.",
+//         });
+//       }
+
+//       invitedById =
+//         invitingUser.id;
+//     }
+
+//     const hashedPassword =
+//       await bcrypt.hash(
+//         cleanPassword,
+//         10
+//       );
+
+//     const newInvitationCode =
+//       await generateUniqueInvitationCode();
+
+//     const user =
+//       await db.user.create({
+//         data: {
+//           firstName: cleanFirstName,
+//           lastName: cleanLastName,
+//           email: cleanEmail,
+//           password: hashedPassword,
+//           role: null,
+//           schoolId,
+//           invitationCode: newInvitationCode,
+//           invitationCreatedAt: new Date(),
+//           invitedById: invitedById,
+//           invitedAt:
+//             invitedById
+//               ? new Date()
+//               : null,
+//         },
+
+//         select: {
+//           id: true,
+//           email: true,
+//           firstName: true,
+//           lastName: true,
+//           invitationCode: true,
+//           invitedById: true,
+//           createdAt: true,
+//         },
+//       });
+
+
+//     // ========================================================
+//     // GENERATE JWT
+//     // ========================================================
+
+//     const accessToken =
+//       jwt.sign(
+//         {
+//           userId: user.id,
+//           role: user.role ?? null,
+//         },
+//         process.env.JWT_SECRET,
+//         {
+//           expiresIn: "7d",
+//         }
+//       );
+
+
+//     // ========================================================
+//     // RESPONSE
+//     // ========================================================
+
+//     return res.status(201).json({
+//       message: "Account created successfully.",
+//       requiresRoleSelection: true,
+//       user: {
+//         id: user.id,
+//         email: user.email,
+//         firstName: user.firstName,
+//         lastName: user.lastName,
+//         invitationCode: user.invitationCode,
+//         invitedById: user.invitedById,
+//       },
+
+//       accessToken,
+//     });
+
+//   } catch (error) {
+
+//     console.error(
+//       "REGISTER ERROR:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       error:
+//         "Unable to create account. Please try again later.",
+//     });
+//   }
+// }
+
+// // ===================== LOGIN =====================
+// export async function login(req, res) {
+//   try {
+//     const { email, password } = req.body;
+
+//     const schoolId =
+//       req.school?.id || null;
+
+//     if (!email || !password) {
+//       return res.status(400).json({
+//         error:
+//           "Email and password are required",
+//       });
+//     }
+
+//     const passwordTrim = password.trim();
+
+//     const user =
+//       await db.user.findFirst({
+//         where: {
+//           email: email.trim(),
+//           schoolId,
+//         },
+//       });
+    
+
+//     if (!user) {
+//       return res.status(404).json({
+//         error: "User not found",
+//       });
+//     }
+
+//     if (!user.password) {
+//       return res.status(400).json({
+//         error:
+//           "This account uses Google. Please sign in with Google.",
+//       });
+//     }
+
+//     const isValid =
+//       await bcrypt.compare(
+//         passwordTrim,
+//         user.password
+//       );
+
+//     if (!isValid) {
+//       return res.status(401).json({
+//         error:
+//           "Invalid credentials",
+//       });
+//     }
+
+//     const accessToken = jwt.sign(
+//       {
+//         userId: user.id,
+//         role: user.role ?? null,
+//       },
+//         process.env.JWT_SECRET,
+//       {
+//         expiresIn: "7d",
+//       }
+//     );
+
+//     // User has not selected role yet
+//     if (!user.role) {
+//       return res.json({
+//         requiresRoleSelection: true,
+//         accessToken,
+//         user: {
+//           id: user.id,
+//           email: user.email,
+//         },
+//       });
+//     }
+
+//     // Parent must select profile
+//     if (user.role === "PARENT") {
+//       return res.json({
+//         requiresProfileSelection: true,
+//         accessToken,
+//         user,
+//       });
+//     }
+
+//     return res.json({
+//       message:
+//         "Login successful",
+//       accessToken,
+//       user,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       error: error.message,
+//     });
+//   }
+// }
+
+
+// ===================== SET-USER-ROLE =====================
+
+// export async function setUserRole(req, res) {
+//   try {
+//     const domainSchoolId = req.school?.id || null;
+
+//     const {
+//       role,
+//       gender,
+//       teacherCode,
+//       age,
+//       schoolId: selectedSchoolId,
+//       classId,
+//       studentCategory,
+//       subjectTaught,
+//       phoneNumber,
+//       schoolEmail,
+//       schoolPhoneContact,
+//       schoolName,
+//     } = req.body;
+
+//     const effectiveSchoolId = selectedSchoolId || domainSchoolId || null;
+
+//     if (!role) {
+//       return res.status(400).json({
+//         error: "Role is required",
+//       });
+//     }
+
+//     const validRoles = [
+//       "teacher",
+//       "student",
+//       "parent",
+//       "school",
+//     ];
+
+//     if (!validRoles.includes(role)) {
+//       return res.status(400).json({
+//         error: "Invalid role selected",
+//       });
+//     }
+
+//     const existingUser =
+//       await db.user.findUnique({
+//         where: {
+//           id: req.user.userId,
+//         },
+//         include: {
+//           teacher: true,
+//           student: true,
+//           parent: true,
+//           school: true,
+//           account: true,
+//         },
+//       });
+
+//     if (!existingUser) {
+//       return res.status(404).json({
+//         error: "User not found",
+//       });
+//     }
+
+//     let schoolRecord = null;
+
+//     if (effectiveSchoolId) {
+//       schoolRecord = await db.school.findUnique({
+//         where: {
+//           id: effectiveSchoolId,
+//         },
+//       });
+
+//       if (!schoolRecord) {
+//         return res.status(400).json({
+//           error: "Selected school does not exist.",
+//         });
+//       }
+//     }
+
+//     async function createAccountWithFreemium(
+//       tx,
+//       accountType,
+//       subscriptionPlanName
+//     ) {
+//       const account =
+//         await tx.account.create({
+//           data: {
+//             accountType,
+//           },
+//         });
+
+//       const freemiumPlan =
+//         await tx.subscriptionPlan.findUnique({
+//           where: {
+//             subscriptionPlanName,
+//           },
+//         });
+
+//       if (!freemiumPlan) {
+//         throw new Error(
+//           `${subscriptionPlanName} plan not found`
+//         );
+//       }
+
+//       await tx.subscription.create({
+//         data: {
+//           account: {
+//             connect: {
+//               id: account.id,
+//             },
+//           },
+//           subscriptionPlan: {
+//             connect: {
+//               id: freemiumPlan.id,
+//             },
+//           },
+//           status: "ACTIVE",
+//           duration: "LIFETIME",
+//           startsAt: new Date(),
+//           endsAt: null,
+//           numberOfTerms: 0,
+//           amountPaid: 0,
+//         },
+//       });
+
+//       return account;
+//     }
+
+//     const result = await db.$transaction(
+//       async (tx) => {
+//         /**
+//          * SCHOOL ROLE
+//          */
+//         if (role === "school") {
+//           let account = existingUser.account;
+
+//           if (!account) {
+//             account = await createAccountWithFreemium(
+//               tx,
+//               "SCHOOL",
+//               "FREEMIUM_SCHOOL"
+//             );
+//           }
+
+//           const school = await tx.school.upsert({
+//             where: {
+//               schoolEmail: schoolEmail.trim(),
+//             },
+
+//             update: {
+//               name: schoolName.trim(),
+//               schoolPhoneContact:
+//                 schoolPhoneContact?.trim() || phoneNumber,
+//               userId: existingUser.id,
+//             },
+
+//             create: {
+//               name: schoolName.trim(),
+//               schoolEmail: schoolEmail.trim(),
+//               schoolPhoneContact:
+//                 schoolPhoneContact?.trim() || phoneNumber,
+//               userId: existingUser.id,
+//             },
+//           });
+
+//           const updatedUser = await tx.user.update({
+//             where: {
+//               id: existingUser.id,
+//             },
+
+//             data: {
+//               role: "SCHOOL",
+//               accountId: account.id,
+//               schoolId: school.id,
+//             },
+//           });
+
+//           return {
+//             user: updatedUser,
+//             profile: school,
+//             redirectUrl: "/school/dashboard",
+//           };
+//         }
+
+//         /**
+//          * TEACHER ROLE
+//          */
+//         if (role === "teacher") {
+//           if (existingUser.teacher) {
+//             throw new Error(
+//               "Teacher profile already exists"
+//             );
+//           }
+
+//           const updatedUser =
+//             await tx.user.update({
+//               where: {
+//                 id: existingUser.id,
+//               },
+//               data: {
+//                 role: "TEACHER",
+//                 schoolId:
+//                   schoolRecord?.id ||
+//                   null,
+//               },
+//             });
+
+//           const teacher =
+//             await tx.teacher.create({
+//               data: {
+//                 userId:
+//                   existingUser.id,
+//                 schoolId:
+//                   schoolRecord?.id ||
+//                   null,
+//                 gender:
+//                   gender || null,
+//                 teacherCode:
+//                   teacherCode ||
+//                   null,
+//                 subject:
+//                   subjectTaught ||
+//                   null,
+//                 phone:
+//                   phoneNumber ||
+//                   null,
+//               },
+//             });
+
+//           return {
+//             user: updatedUser,
+//             profile: teacher,
+//             redirectUrl:
+//               "/teacher/dashboard",
+//           };
+//         }
+
+//         /**
+//          * STUDENT ROLE
+//          */
+//         if (role === "student") {
+//           if (existingUser.student) {
+//             throw new Error(
+//               "Student profile already exists"
+//             );
+//           }
+
+//           let account =
+//             existingUser.account;
+
+//           if (!account) {
+//             account =
+//               await createAccountWithFreemium(
+//                 tx,
+//                 "INDIVIDUAL",
+//                 "FREEMIUM_INDIVIDUAL"
+//               );
+//           }
+
+//           let classRecord = null;
+//           let classLevel = null;
+
+//           if (classId) {
+//             classRecord =
+//               await tx.class.findUnique({
+//                 where: {
+//                   id: classId,
+//                 },
+//               });
+
+//             if (!classRecord) {
+//               throw new Error(
+//                 "Selected class not found"
+//               );
+//             }
+
+//             classLevel =
+//               classRecord.name ||
+//               classRecord.level ||
+//               null;
+//           }
+
+//           const updatedUser =
+//             await tx.user.update({
+//               where: {
+//                 id: existingUser.id,
+//               },
+//               data: {
+//                 role: "STUDENT",
+//                 accountId:
+//                   account.id,
+//                 schoolId:
+//                   schoolRecord?.id ||
+//                   null,
+//               },
+//             });
+
+//           const student =
+//             await tx.student.create({
+//               data: {
+//                 userId:
+//                   existingUser.id,
+//                 accountId:
+//                   account.id,
+//                 schoolId: schoolRecord?.id || null,
+//                 firstName:
+//                   existingUser.firstName,
+//                 lastName:
+//                   existingUser.lastName,
+//                 gender:
+//                   gender || null,
+//                 age: age
+//                   ? Number(age)
+//                   : null,
+//                 classId:
+//                   classRecord?.id ||
+//                   null,
+//                 classLevel,
+//                 category:
+//                   studentCategory ||
+//                   null,
+//                 phone:
+//                   phoneNumber ||
+//                   null,
+//               },
+//             });
+
+//           return {
+//             user: updatedUser,
+//             profile: student,
+//             studentId:
+//               student.id,
+//             redirectUrl:
+//               "/student/dashboard",
+//           };
+//         }
+
+//         /**
+//          * PARENT ROLE
+//          */
+//         if (role === "parent") {
+//           if (existingUser.parent) {
+//             throw new Error(
+//               "Parent profile already exists"
+//             );
+//           }
+
+//           let account =
+//             existingUser.account;
+
+//           if (!account) {
+//             account =
+//               await createAccountWithFreemium(
+//                 tx,
+//                 "FAMILY",
+//                 "FREEMIUM_FAMILY"
+//               );
+//           }
+
+//           const updatedUser =
+//             await tx.user.update({
+//               where: {
+//                 id: existingUser.id,
+//               },
+//               data: {
+//                 role: "PARENT",
+//                 accountId:
+//                   account.id,
+//                 phone:
+//                   phoneNumber ||
+//                   null,
+//                 schoolId:
+//                   schoolRecord?.id ||
+//                   null,
+//               },
+//             });
+
+//           const parent =
+//             await tx.parent.create({
+//               data: {
+//                 userId:
+//                   existingUser.id,
+//                 schoolId:
+//                   schoolRecord?.id ||
+//                   null,
+//                 phone:
+//                   phoneNumber ||
+//                   null,
+//                 firstName:
+//                   existingUser.firstName,
+//                 lastName:
+//                   existingUser.lastName,
+//               },
+//             });
+
+//           return {
+//             user: updatedUser,
+//             profile: parent,
+//             redirectUrl:
+//               "/parent/dashboard",
+//           };
+//         }
+
+//         throw new Error(
+//           "Unable to process role"
+//         );
+//       }
+//     );
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Profile setup completed successfully",
+//       redirectUrl: result.redirectUrl,
+//       user: result.user,
+//       profile: result.profile,
+//       studentId: result.studentId || null,
+//     });
+//   } catch (error) {
+//     console.error(error);
+
+//     return res.status(500).json({
+//       success: false,
+//       error: error.message,
+//     });
+//   }
+// }
 
 // ===================== GETME =====================
 export async function getMe(req, res) {
