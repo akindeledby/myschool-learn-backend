@@ -1,392 +1,273 @@
-import axios from "axios";
 import { db } from "../../../lib/db.js";
-import { generatePaymentReference } from "../../utils/paymentReference.js";
 
-const PAYSTACK_INITIALIZE_URL =
-  "https://api.paystack.co/transaction/initialize";
+import {
+  initializePaystackPayment,
+} from "./initializePaystackPayment.service.js";
 
-async function markPaymentFailed(reference) {
-  if (!reference) return;
-
-  try {
-    await db.payment.updateMany({
-      where: {
-        reference,
-        status: "PENDING",
-      },
-      data: {
-        status: "FAILED",
-      },
-    });
-  } catch (error) {
-    console.error(
-      "[Payment Status Update Error]",
-      error
-    );
-  }
-}
+import {
+  initializeFlutterwavePayment,
+} from "./initializeFlutterwavePayment.service.js";
 
 export async function initializeSubscriptionPayment({
+  userId,
   email,
   amount,
   accountId,
   subscriptionPlanId,
   numberOfTerms,
+  paymentProvider,
   metadata = {},
 }) {
-  let reference = null;
-  let paymentCreated = false;
+  //---------------------------------------------------------
+  // Validate payment provider
+  //---------------------------------------------------------
 
-  try {
-    //-------------------------------------------------------
-    // Validate input
-    //-------------------------------------------------------
+  if (
+    !["PAYSTACK", "FLUTTERWAVE"].includes(
+      paymentProvider
+    )
+  ) {
+    throw new Error(
+      "Invalid payment provider."
+    );
+  }
 
-    if (!email || !email.trim()) {
-      throw new Error(
-        "Customer email is required."
-      );
-    }
+  //---------------------------------------------------------
+  // Validate authenticated user
+  //---------------------------------------------------------
 
-    if (!accountId) {
-      throw new Error(
-        "Account ID is required."
-      );
-    }
+  if (!userId) {
+    throw new Error(
+      "Authenticated user is required."
+    );
+  }
 
-    if (!subscriptionPlanId) {
-      throw new Error(
-        "Subscription plan ID is required."
-      );
-    }
+  //---------------------------------------------------------
+  // Validate account
+  //---------------------------------------------------------
 
-    const terms = Number(numberOfTerms);
+  if (!accountId) {
+    throw new Error(
+      "Account ID is required."
+    );
+  }
 
-    if (![1, 2, 3].includes(terms)) {
-      throw new Error(
-        "Invalid number of terms."
-      );
-    }
+  //---------------------------------------------------------
+  // Validate email
+  //---------------------------------------------------------
 
-    const numericAmount = Number(amount);
+  if (!email || !email.trim()) {
+    throw new Error(
+      "Customer email is required."
+    );
+  }
 
-    if (
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      throw new Error(
-        "Invalid payment amount."
-      );
-    }
+  //---------------------------------------------------------
+  // Validate subscription plan
+  //---------------------------------------------------------
 
-    //-------------------------------------------------------
-    // Normalize amount
-    //-------------------------------------------------------
+  if (!subscriptionPlanId) {
+    throw new Error(
+      "Subscription plan ID is required."
+    );
+  }
 
-    const amountInNaira =
-      Number(numericAmount.toFixed(2));
+  //---------------------------------------------------------
+  // Validate number of terms
+  //---------------------------------------------------------
 
-    const amountInKobo =
-      Math.round(amountInNaira * 100);
+  const terms = Number(numberOfTerms);
 
-    if (
-      !Number.isSafeInteger(amountInKobo) ||
-      amountInKobo <= 0
-    ) {
-      throw new Error(
-        "Invalid payment amount."
-      );
-    }
+  if (![1, 2, 3].includes(terms)) {
+    throw new Error(
+      "Invalid number of terms."
+    );
+  }
 
-    //-------------------------------------------------------
-    // Generate payment reference
-    //-------------------------------------------------------
+  //---------------------------------------------------------
+  // Validate amount
+  //---------------------------------------------------------
 
-    reference =
-      generatePaymentReference();
+  const numericAmount = Number(amount);
 
-    //-------------------------------------------------------
-    // Create PENDING payment
-    //-------------------------------------------------------
+  if (
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0
+  ) {
+    throw new Error(
+      "Invalid payment amount."
+    );
+  }
 
-    await db.payment.create({
-      data: {
-        accountId,
+  //---------------------------------------------------------
+  // Get authenticated user
+  //---------------------------------------------------------
+  //
+  // IMPORTANT:
+  //
+  // The frontend does NOT tell us who the referrer is.
+  //
+  // We get invitedById directly from the authenticated user.
+  //
+  //---------------------------------------------------------
 
-        subscriptionPlanId,
+  const user =
+    await db.user.findUnique({
+      where: {
+        id: userId,
+      },
 
-        reference,
-
-        amount: amountInNaira,
-
-        numberOfTerms: terms,
-
-        currency: "NGN",
-
-        provider: "PAYSTACK",
-
-        status: "PENDING",
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        invitedById: true,
       },
     });
 
-    paymentCreated = true;
-
-    //-------------------------------------------------------
-    // Initialize transaction with Paystack
-    //-------------------------------------------------------
-
-    let response;
-
-    try {
-      response = await axios.post(
-        PAYSTACK_INITIALIZE_URL,
-        {
-          email:
-            email.trim().toLowerCase(),
-
-          amount: amountInKobo,
-
-          reference,
-
-          currency: "NGN",
-
-          metadata,
-
-          callback_url:
-            `${process.env.FRONTEND_URL}/payment-success`,
-        },
-        {
-          headers: {
-            Authorization:
-              `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-
-            "Content-Type":
-              "application/json",
-          },
-
-          timeout: 15000,
-        }
-      );
-    } catch (paystackError) {
-      //-----------------------------------------------------
-      // Paystack explicitly rejected the request
-      //-----------------------------------------------------
-
-      if (
-        paystackError.response
-      ) {
-        await markPaymentFailed(
-          reference
-        );
-
-        console.error(
-          "[Paystack Initialize Error]",
-          paystackError.response.data
-        );
-
-        throw new Error(
-          paystackError.response
-            .data?.message ||
-            "Unable to initialize payment."
-        );
-      }
-
-      //-----------------------------------------------------
-      // Network/timeout error
-      //-----------------------------------------------------
-      // We do NOT immediately mark the payment FAILED
-      // because Paystack may have created the transaction
-      // even though our server did not receive the response.
-
-      console.error(
-        "[Paystack Network Error]",
-        paystackError.message
-      );
-
-      throw new Error(
-        "Unable to confirm payment initialization with Paystack. Please try again."
-      );
-    }
-
-    //-------------------------------------------------------
-    // Validate Paystack response
-    //-------------------------------------------------------
-
-    const paystackData =
-      response.data?.data;
-
-    if (
-      !response.data?.status ||
-      !paystackData
-    ) {
-      await markPaymentFailed(
-        reference
-      );
-
-      throw new Error(
-        response.data?.message ||
-          "Invalid Paystack response."
-      );
-    }
-
-    //-------------------------------------------------------
-    // Verify reference
-    //-------------------------------------------------------
-
-    if (
-      paystackData.reference !==
-      reference
-    ) {
-      await markPaymentFailed(
-        reference
-      );
-
-      throw new Error(
-        "Paystack returned an unexpected payment reference."
-      );
-    }
-
-    //-------------------------------------------------------
-    // Validate checkout information
-    //-------------------------------------------------------
-
-    if (
-      !paystackData.authorization_url ||
-      !paystackData.access_code
-    ) {
-      await markPaymentFailed(
-        reference
-      );
-
-      throw new Error(
-        "Paystack did not return valid checkout information."
-      );
-    }
-
-    //-------------------------------------------------------
-    // Success
-    //-------------------------------------------------------
-
-    return {
-      reference,
-
-      accessCode:
-        paystackData.access_code,
-
-      authorizationUrl:
-        paystackData.authorization_url,
-    };
-
-  } catch (error) {
-    console.error(
-      "[initializeSubscriptionPayment]",
-      error
-    );
-
-    //-------------------------------------------------------
-    // Safety net
-    //-------------------------------------------------------
-
-    if (
-      reference &&
-      paymentCreated
-    ) {
-      try {
-        await markPaymentFailed(
-          reference
-        );
-      } catch (updateError) {
-        console.error(
-          "[Payment Failure Update Error]",
-          updateError
-        );
-      }
-    }
-
-    //-------------------------------------------------------
-    // Return clean error
-    //-------------------------------------------------------
-
+  if (!user) {
     throw new Error(
-      error.message ||
-        "Unable to initialize payment."
+      "User not found."
     );
   }
+
+  //---------------------------------------------------------
+  // Verify account belongs to authenticated user
+  //---------------------------------------------------------
+  //
+  // We do not simply trust an accountId supplied by the
+  // controller. Confirm that the authenticated user actually
+  // belongs to that account.
+  //
+  //---------------------------------------------------------
+
+  const account =
+    await db.account.findFirst({
+      where: {
+        id: accountId,
+
+        users: {
+          some: {
+            id: user.id,
+          },
+        },
+      },
+
+      select: {
+        id: true,
+      },
+    });
+
+  if (!account) {
+    throw new Error(
+      "Account not found or does not belong to the authenticated user."
+    );
+  }
+
+  //---------------------------------------------------------
+  // Determine referral source
+  //---------------------------------------------------------
+  //
+  // This is the authoritative referral relationship.
+  //
+  // User.invitedById
+  //        ↓
+  // Payment.referredByUserId
+  //
+  //---------------------------------------------------------
+
+  const referredByUserId =
+    user.invitedById || null;
+
+  //---------------------------------------------------------
+  // Build payment metadata
+  //---------------------------------------------------------
+
+  const paymentMetadata = {
+    ...metadata,
+
+    userId: user.id,
+
+    accountId: account.id,
+
+    subscriptionPlanId,
+
+    numberOfTerms: terms,
+
+    paymentProvider,
+
+    role: user.role,
+
+    ...(referredByUserId
+      ? {
+          referredByUserId,
+        }
+      : {}),
+  };
+
+  //---------------------------------------------------------
+  // Initialize with Paystack
+  //---------------------------------------------------------
+
+  if (
+    paymentProvider === "PAYSTACK"
+  ) {
+    return await initializePaystackPayment({
+      email:
+        user.email || email,
+
+      amount:
+        numericAmount,
+
+      accountId:
+        account.id,
+
+      subscriptionPlanId,
+
+      numberOfTerms:
+        terms,
+
+      referredByUserId,
+
+      metadata:
+        paymentMetadata,
+    });
+  }
+
+  //---------------------------------------------------------
+  // Initialize with Flutterwave
+  //---------------------------------------------------------
+
+  if (
+    paymentProvider === "FLUTTERWAVE"
+  ) {
+    return await initializeFlutterwavePayment({
+      email:
+        user.email || email,
+
+      amount:
+        numericAmount,
+
+      accountId:
+        account.id,
+
+      subscriptionPlanId,
+
+      numberOfTerms:
+        terms,
+
+      referredByUserId,
+
+      metadata:
+        paymentMetadata,
+    });
+  }
+
+  //---------------------------------------------------------
+  // Safety fallback
+  //---------------------------------------------------------
+
+  throw new Error(
+    "Unsupported payment provider."
+  );
 }
-
-
-// import axios from "axios";
-// import { generatePaymentReference } from "../../utils/paymentReference.js";
-
-// const PAYSTACK_INITIALIZE_URL =
-//   "https://api.paystack.co/transaction/initialize";
-
-// export async function initializeSubscriptionPayment({
-//   email,
-//   amount,
-//   metadata = {},
-// }) {
-//   try {
-//     const reference =
-//       generatePaymentReference();
-
-//     const response =
-//       await axios.post(
-//         PAYSTACK_INITIALIZE_URL,
-//         {
-//           email,
-
-//           // Paystack expects Kobo
-//           amount: Math.round(amount * 100),
-
-//           reference,
-
-//           currency: "NGN",
-
-//           metadata,
-
-//           callback_url:
-//             `${process.env.FRONTEND_URL}/payment-success`,
-//         },
-//         {
-//           headers: {
-//             Authorization:
-//               `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-
-//             "Content-Type":
-//               "application/json",
-//           },
-//         }
-//       );
-
-//     const paystackData =
-//       response.data?.data;
-
-//     if (!paystackData) {
-//       throw new Error(
-//         "Invalid Paystack response."
-//       );
-//     }
-
-//     return {
-//       reference,
-
-//       accessCode:
-//         paystackData.access_code,
-
-//       authorizationUrl:
-//         paystackData.authorization_url,
-//     };
-//   } catch (error) {
-//     console.error(
-//       "Paystack Initialize Error:",
-//       error.response?.data ||
-//         error.message
-//     );
-
-//     throw new Error(
-//       error.response?.data?.message ||
-//         "Unable to initialize payment."
-//     );
-//   }
-// }

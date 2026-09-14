@@ -13,8 +13,8 @@ export async function seedSubscriptionPlans() {
 
       maxStudents: 1,
 
-      videoLessonLimit: 10,
-      homeHelperLimit: 10,
+      videoLessonLimit: null,
+      homeHelperLimit: 5,
 
       canTakeTest: false,
       canPracticeForQuiz: false,
@@ -31,9 +31,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "SILVER_INDIVIDUAL",
 
-      pricePerTerm: 1500,
+      pricePerTerm: 3500,
 
-      pricePerSession: 4000,
+      pricePerSession: 9500,
 
       maxStudents: 1,
 
@@ -55,9 +55,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "DIAMOND_INDIVIDUAL",
 
-      pricePerTerm: 2500,
+      pricePerTerm: 6000,
 
-      pricePerSession: 6500,
+      pricePerSession: 17000,
 
       maxStudents: 1,
 
@@ -79,9 +79,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "GOLD_INDIVIDUAL",
 
-      pricePerTerm: 5000,
+      pricePerTerm: 10000,
 
-      pricePerSession: 13000,
+      pricePerSession: 25000,
 
       maxStudents: 1,
 
@@ -109,8 +109,8 @@ export async function seedSubscriptionPlans() {
 
       maxStudents: 2,
 
-      videoLessonLimit: 20,
-      homeHelperLimit: 20,
+      videoLessonLimit: null,
+      homeHelperLimit: 10,
 
       canTakeTest: false,
       canPracticeForQuiz: false,
@@ -126,9 +126,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "SILVER_FAMILY",
 
-      pricePerTerm: 5000,
+      pricePerTerm: 12000,
 
-      pricePerSession: 13000,
+      pricePerSession: 34000,
 
       maxStudents: 4,
 
@@ -150,9 +150,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "DIAMOND_FAMILY",
 
-      pricePerTerm: 9000,
+      pricePerTerm: 22000,
 
-      pricePerSession: 24000,
+      pricePerSession: 60000,
 
       maxStudents: 4,
 
@@ -174,11 +174,11 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "GOLD_FAMILY",
 
-      pricePerTerm: 20000,
+      pricePerTerm: 35000,
 
-      pricePerSession: 50000,
+      pricePerSession: 95000,
 
-      maxStudents: 6,
+      maxStudents: 5,
 
       videoLessonLimit: null,
       homeHelperLimit: null,
@@ -202,8 +202,8 @@ export async function seedSubscriptionPlans() {
       pricePerSession: 0,
       maxStudents: 50,
 
-      videoLessonLimit: 20,
-      homeHelperLimit: 20,
+      videoLessonLimit: null,
+      homeHelperLimit: 10,
 
       canTakeTest: false,
       canPracticeForQuiz: false,
@@ -220,9 +220,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "SILVER_SCHOOL",
 
-      pricePerTerm: 150000,
+      pricePerTerm: 250000,
 
-      pricePerSession: 400000,
+      pricePerSession: 700000,
 
       maxStudents: 150,
 
@@ -244,9 +244,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "DIAMOND_SCHOOL",
 
-      pricePerTerm: 300000,
+      pricePerTerm: 400000,
 
-      pricePerSession: 800000,
+      pricePerSession: 1000000,
 
       maxStudents: 250,
 
@@ -269,9 +269,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "GOLD_SCHOOL",
 
-      pricePerTerm: 400000,
+      pricePerTerm: 700000,
 
-      pricePerSession: 1000000,
+      pricePerSession: 1500000,
 
       maxStudents: 500,
 

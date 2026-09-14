@@ -6,15 +6,31 @@ export async function initializeSubscriptionPaymentController(
   res
 ) {
   try {
-    const userId = req.user.userId;
+    //-------------------------------------------------------
+    // Get authenticated user
+    //-------------------------------------------------------
+
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    //-------------------------------------------------------
+    // Get request data
+    //-------------------------------------------------------
 
     const {
       subscriptionPlanId,
       numberOfTerms,
+      paymentProvider,
     } = req.body;
 
     //-------------------------------------------------------
-    // Validate request
+    // Validate subscription plan
     //-------------------------------------------------------
 
     if (!subscriptionPlanId) {
@@ -23,6 +39,10 @@ export async function initializeSubscriptionPaymentController(
         message: "Subscription plan is required.",
       });
     }
+
+    //-------------------------------------------------------
+    // Validate number of terms
+    //-------------------------------------------------------
 
     const terms = Number(numberOfTerms);
 
@@ -35,6 +55,23 @@ export async function initializeSubscriptionPaymentController(
     }
 
     //-------------------------------------------------------
+    // Validate payment provider
+    //-------------------------------------------------------
+
+    if (
+      !paymentProvider ||
+      !["PAYSTACK", "FLUTTERWAVE"].includes(
+        paymentProvider
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a valid payment provider.",
+      });
+    }
+
+    //-------------------------------------------------------
     // Get authenticated user
     //-------------------------------------------------------
 
@@ -42,6 +79,7 @@ export async function initializeSubscriptionPaymentController(
       where: {
         id: userId,
       },
+
       include: {
         account: true,
       },
@@ -54,12 +92,20 @@ export async function initializeSubscriptionPaymentController(
       });
     }
 
+    //-------------------------------------------------------
+    // Validate account
+    //-------------------------------------------------------
+
     if (!user.account) {
       return res.status(404).json({
         success: false,
         message: "Account not found.",
       });
     }
+
+    //-------------------------------------------------------
+    // Validate email
+    //-------------------------------------------------------
 
     if (!user.email) {
       return res.status(400).json({
@@ -108,6 +154,10 @@ export async function initializeSubscriptionPaymentController(
         ) * terms;
     }
 
+    //-------------------------------------------------------
+    // Validate calculated amount
+    //-------------------------------------------------------
+
     if (
       !Number.isFinite(amount) ||
       amount <= 0
@@ -120,11 +170,25 @@ export async function initializeSubscriptionPaymentController(
     }
 
     //-------------------------------------------------------
-    // Initialize Paystack
+    // Initialize payment
+    //-------------------------------------------------------
+    //
+    // IMPORTANT:
+    //
+    // We intentionally do NOT pass:
+    //
+    // referredByUserId
+    // schoolId
+    //
+    // The common payment service obtains the referral
+    // relationship directly from User.invitedById.
+    //
     //-------------------------------------------------------
 
     const payment =
       await initializeSubscriptionPayment({
+        userId,
+
         email: user.email,
 
         amount,
@@ -135,23 +199,17 @@ export async function initializeSubscriptionPaymentController(
         subscriptionPlanId:
           subscriptionPlan.id,
 
-        numberOfTerms: terms,
+        numberOfTerms:
+          terms,
+
+        paymentProvider,
 
         metadata: {
-          userId: user.id,
-
-          accountId:
-            user.account.id,
-
-          subscriptionPlanId:
-            subscriptionPlan.id,
-
           subscriptionPlanName:
             subscriptionPlan.subscriptionPlanName,
 
-          numberOfTerms: terms,
-
-          role: user.role,
+          role:
+            user.role,
         },
       });
 
@@ -161,8 +219,10 @@ export async function initializeSubscriptionPaymentController(
 
     return res.status(200).json({
       success: true,
+
       message:
         "Payment initialized successfully.",
+
       payment,
     });
 
@@ -174,10 +234,10 @@ export async function initializeSubscriptionPaymentController(
 
     return res.status(500).json({
       success: false,
+
       message:
         error.message ||
         "Failed to initialize payment.",
     });
   }
 }
-

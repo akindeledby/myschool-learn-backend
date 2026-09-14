@@ -1,26 +1,19 @@
 import express from "express";
 
 import {
-  verifySubscriptionPayment,
-} from "../controllers/payment/verifySubscriptionPayment.controller.js";
+  verifyPaymentController,
+} from "../controllers/payment/verifyPayment.controller.js";
 
 import {
-  paystackWebhook,
-} from "../controllers/payment/paystackWebhook.controller.js";
+  authMiddleWare,
+} from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 router.get(
   "/",
-  verifySubscriptionPayment
-);
-
-router.post(
-  "/subscription-plan/webhook",
-  express.raw({
-    type: "application/json",
-  }),
-  paystackWebhook
+  authMiddleWare(),
+  verifyPaymentController
 );
 
 export default router;

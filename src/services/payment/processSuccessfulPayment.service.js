@@ -1,6 +1,12 @@
 import { db } from "../../../lib/db.js";
 
-function getSubscriptionDuration(numberOfTerms) {
+/**
+ * Determine subscription duration
+ * from the number of terms purchased.
+ */
+function getSubscriptionDuration(
+  numberOfTerms
+) {
   switch (numberOfTerms) {
     case 1:
       return "TERM";
@@ -18,36 +24,69 @@ function getSubscriptionDuration(numberOfTerms) {
   }
 }
 
-function getMonthsPurchased(numberOfTerms) {
+/**
+ * Each term represents 4 months.
+ *
+ * 1 term  = 4 months
+ * 2 terms = 8 months
+ * 3 terms = 12 months
+ */
+function getMonthsPurchased(
+  numberOfTerms
+) {
   return numberOfTerms * 4;
 }
 
-function normalizeCurrency(currency) {
+/**
+ * Normalize currency values.
+ */
+function normalizeCurrency(
+  currency
+) {
   return String(currency || "")
     .trim()
     .toUpperCase();
 }
 
-function getPaystackTransactionId(paymentData) {
+/**
+ * Convert provider transaction ID to BigInt.
+ *
+ * The database uses BigInt for both Paystack and
+ * Flutterwave transaction IDs.
+ */
+function getTransactionId(
+  transactionId
+) {
   if (
-    paymentData?.id === undefined ||
-    paymentData?.id === null ||
-    paymentData?.id === ""
+    transactionId === undefined ||
+    transactionId === null ||
+    transactionId === ""
   ) {
     return null;
   }
 
   try {
-    return BigInt(paymentData.id);
+    return BigInt(transactionId);
   } catch {
     throw new Error(
-      "Invalid Paystack transaction ID."
+      "Invalid payment transaction ID."
     );
   }
 }
 
-export async function activateSubscription({
+/**
+ * Process a successfully verified payment.
+ *
+ * This service is provider-independent.
+ *
+ * Paystack verification and Flutterwave verification
+ * should both call this service after independently
+ * confirming that the provider reports the transaction
+ * as successful.
+ */
+export async function processSuccessfulPayment({
   reference,
+  provider,
   paymentData,
 }) {
   //-------------------------------------------------------
@@ -60,6 +99,22 @@ export async function activateSubscription({
     );
   }
 
+  if (!provider) {
+    throw new Error(
+      "Payment provider is required."
+    );
+  }
+
+  if (
+    !["PAYSTACK", "FLUTTERWAVE"].includes(
+      provider
+    )
+  ) {
+    throw new Error(
+      "Invalid payment provider."
+    );
+  }
+
   if (!paymentData) {
     throw new Error(
       "Payment data is required."
@@ -67,18 +122,26 @@ export async function activateSubscription({
   }
 
   //-------------------------------------------------------
-  // Validate Paystack transaction
+  // Validate successful provider transaction
   //-------------------------------------------------------
 
-  if (paymentData.status !== "success") {
+  if (
+    paymentData.status !==
+    "success"
+  ) {
     throw new Error(
       "Payment was not successful."
     );
   }
 
+  //-------------------------------------------------------
+  // Validate payment reference
+  //-------------------------------------------------------
+
   if (
     !paymentData.reference ||
-    paymentData.reference !== reference
+    paymentData.reference !==
+      reference
   ) {
     throw new Error(
       "Payment reference mismatch."
@@ -86,7 +149,7 @@ export async function activateSubscription({
   }
 
   //-------------------------------------------------------
-  // Find the payment created by MySchoolLearn
+  // Find payment created by MySchoolLearn
   //-------------------------------------------------------
 
   const pendingPayment =
@@ -108,6 +171,19 @@ export async function activateSubscription({
   }
 
   //-------------------------------------------------------
+  // Verify provider
+  //-------------------------------------------------------
+
+  if (
+    pendingPayment.provider !==
+    provider
+  ) {
+    throw new Error(
+      "Payment provider does not match the recorded payment."
+    );
+  }
+
+  //-------------------------------------------------------
   // Already processed
   //-------------------------------------------------------
 
@@ -117,14 +193,16 @@ export async function activateSubscription({
   ) {
     return {
       success: true,
+
       alreadyProcessed: true,
+
       subscriptionId:
         pendingPayment.subscriptionId,
     };
   }
 
   //-------------------------------------------------------
-  // Only pending payments can be activated
+  // Only PENDING payments can be processed
   //-------------------------------------------------------
 
   if (
@@ -150,7 +228,9 @@ export async function activateSubscription({
   // Validate subscription plan
   //-------------------------------------------------------
 
-  if (!pendingPayment.subscriptionPlan) {
+  if (
+    !pendingPayment.subscriptionPlan
+  ) {
     throw new Error(
       "Subscription plan associated with this payment could not be found."
     );
@@ -182,30 +262,100 @@ export async function activateSubscription({
   }
 
   //-------------------------------------------------------
-  // Validate amount
+  // Validate payment amount
   //-------------------------------------------------------
-  // Database:
-  // amount = Naira
   //
-  // Paystack:
-  // amount = Kobo
+  // IMPORTANT:
+  //
+  // MySchoolLearn stores payment.amount in Naira.
+  //
+  // Paystack verification returns amount in Kobo.
+  //
+  // Flutterwave verification returns amount in Naira.
+  //
+  //-------------------------------------------------------
+
+  const expectedAmountNaira =
+    Number(
+      pendingPayment.amount
+    );
+
+  let receivedAmountNaira;
+
+  if (
+    provider === "PAYSTACK"
+  ) {
+    const receivedAmountKobo =
+      Number(
+        paymentData.amount
+      );
+
+    if (
+      !Number.isSafeInteger(
+        receivedAmountKobo
+      ) ||
+      receivedAmountKobo <= 0
+    ) {
+      throw new Error(
+        "Invalid Paystack payment amount."
+      );
+    }
+
+    receivedAmountNaira =
+      receivedAmountKobo / 100;
+
+  } else {
+    receivedAmountNaira =
+      Number(
+        paymentData.amount
+      );
+
+    if (
+      !Number.isFinite(
+        receivedAmountNaira
+      ) ||
+      receivedAmountNaira <= 0
+    ) {
+      throw new Error(
+        "Invalid Flutterwave payment amount."
+      );
+    }
+  }
+
+  //-------------------------------------------------------
+  // Compare amounts
+  //-------------------------------------------------------
 
   const expectedAmountKobo =
     Math.round(
-      Number(pendingPayment.amount) *
-        100
+      expectedAmountNaira * 100
     );
 
   const receivedAmountKobo =
-    Number(paymentData.amount);
+    Math.round(
+      receivedAmountNaira * 100
+    );
 
   if (
     !Number.isSafeInteger(
+      expectedAmountKobo
+    ) ||
+    !Number.isSafeInteger(
       receivedAmountKobo
     ) ||
-    receivedAmountKobo !==
-      expectedAmountKobo
+    expectedAmountKobo !==
+      receivedAmountKobo
   ) {
+    console.error(
+      "[Payment Amount Mismatch]",
+      {
+        reference,
+        provider,
+        expectedAmountNaira,
+        receivedAmountNaira,
+      }
+    );
+
     throw new Error(
       "Payment amount does not match the expected amount."
     );
@@ -245,12 +395,12 @@ export async function activateSubscription({
     );
 
   //-------------------------------------------------------
-  // Paystack transaction ID
+  // Provider transaction ID
   //-------------------------------------------------------
 
-  const paystackTransactionId =
-    getPaystackTransactionId(
-      paymentData
+  const transactionId =
+    getTransactionId(
+      paymentData.transactionId
     );
 
   //-------------------------------------------------------
@@ -260,6 +410,7 @@ export async function activateSubscription({
   const result =
     await db.$transaction(
       async (tx) => {
+
         //---------------------------------------------------
         // Re-read payment inside transaction
         //---------------------------------------------------
@@ -287,13 +438,14 @@ export async function activateSubscription({
         ) {
           return {
             alreadyProcessed: true,
+
             subscriptionId:
               payment.subscriptionId,
           };
         }
 
         //---------------------------------------------------
-        // Only pending payments continue
+        // Only PENDING payments continue
         //---------------------------------------------------
 
         if (
@@ -306,27 +458,48 @@ export async function activateSubscription({
         }
 
         //---------------------------------------------------
-        // Prevent duplicate Paystack transaction IDs
+        // Prevent duplicate provider transaction IDs
         //---------------------------------------------------
 
-        if (paystackTransactionId) {
+        if (transactionId) {
+
           const existingTransaction =
-            await tx.payment.findFirst({
-              where: {
-                paystackTransactionId,
-                NOT: {
-                  reference,
-                },
-              },
-              select: {
-                id: true,
-                reference: true,
-              },
-            });
+            provider ===
+            "PAYSTACK"
+              ? await tx.payment.findFirst({
+                  where: {
+                    paystackTransactionId:
+                      transactionId,
+
+                    NOT: {
+                      reference,
+                    },
+                  },
+
+                  select: {
+                    id: true,
+                    reference: true,
+                  },
+                })
+              : await tx.payment.findFirst({
+                  where: {
+                    flutterwaveTransactionId:
+                      transactionId,
+
+                    NOT: {
+                      reference,
+                    },
+                  },
+
+                  select: {
+                    id: true,
+                    reference: true,
+                  },
+                });
 
           if (existingTransaction) {
             throw new Error(
-              "This Paystack transaction has already been processed."
+              `This ${provider} transaction has already been processed.`
             );
           }
         }
@@ -335,7 +508,8 @@ export async function activateSubscription({
         // Current time
         //---------------------------------------------------
 
-        const now = new Date();
+        const now =
+          new Date();
 
         //---------------------------------------------------
         // Find current subscription
@@ -353,7 +527,8 @@ export async function activateSubscription({
         // Determine subscription start
         //---------------------------------------------------
 
-        let startsAt = now;
+        let startsAt =
+          now;
 
         if (
           existingSubscription &&
@@ -386,7 +561,10 @@ export async function activateSubscription({
 
         let subscription;
 
-        if (existingSubscription) {
+        if (
+          existingSubscription
+        ) {
+
           subscription =
             await tx.subscription.update({
               where: {
@@ -398,7 +576,8 @@ export async function activateSubscription({
                 subscriptionPlanId:
                   payment.subscriptionPlanId,
 
-                status: "ACTIVE",
+                status:
+                  "ACTIVE",
 
                 duration,
 
@@ -416,10 +595,13 @@ export async function activateSubscription({
                     numberOfTerms,
                 },
 
-                isLifetime: false,
+                isLifetime:
+                  false,
               },
             });
+
         } else {
+
           subscription =
             await tx.subscription.create({
               data: {
@@ -429,7 +611,8 @@ export async function activateSubscription({
                 subscriptionPlanId:
                   payment.subscriptionPlanId,
 
-                status: "ACTIVE",
+                status:
+                  "ACTIVE",
 
                 duration,
 
@@ -442,9 +625,49 @@ export async function activateSubscription({
 
                 numberOfTerms,
 
-                isLifetime: false,
+                isLifetime:
+                  false,
               },
             });
+        }
+
+        //---------------------------------------------------
+        // Prepare payment update
+        //---------------------------------------------------
+
+        const paymentUpdate = {
+          subscriptionId:
+            subscription.id,
+
+          status:
+            "SUCCESS",
+
+          paidAt:
+            paymentData.paidAt
+              ? new Date(
+                  paymentData.paidAt
+                )
+              : now,
+        };
+
+        //---------------------------------------------------
+        // Store provider transaction ID
+        //---------------------------------------------------
+
+        if (
+          transactionId &&
+          provider === "PAYSTACK"
+        ) {
+          paymentUpdate.paystackTransactionId =
+            transactionId;
+        }
+
+        if (
+          transactionId &&
+          provider === "FLUTTERWAVE"
+        ) {
+          paymentUpdate.flutterwaveTransactionId =
+            transactionId;
         }
 
         //---------------------------------------------------
@@ -456,25 +679,14 @@ export async function activateSubscription({
             reference,
           },
 
-          data: {
-            subscriptionId:
-              subscription.id,
-
-            status: "SUCCESS",
-
-            paidAt:
-              paymentData.paid_at
-                ? new Date(
-                    paymentData.paid_at
-                  )
-                : new Date(),
-
-            paystackTransactionId,
-          },
+          data:
+            paymentUpdate,
         });
 
         return {
-          alreadyProcessed: false,
+          alreadyProcessed:
+            false,
+
           subscriptionId:
             subscription.id,
         };
@@ -487,8 +699,10 @@ export async function activateSubscription({
 
   return {
     success: true,
+
     alreadyProcessed:
       result.alreadyProcessed,
+
     subscriptionId:
       result.subscriptionId,
   };

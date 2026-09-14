@@ -7,47 +7,49 @@ datasource db {
   provider = "postgresql"
 }
 
+
 model User {
-  id                      String          @id @default(uuid())
+  id                  String          @id @default(uuid())
 
-  email                   String          @unique
-  password                String?
-  googleId                String?         @unique
+  email               String          @unique
+  password            String?
+  googleId            String?         @unique
 
-  firstName               String?
-  lastName                String?
-  phone                   String?
+  firstName           String?
+  lastName            String?
+  phone               String?
 
-  role                    Role?
+  role                Role?
 
-  profileImageUrl         String?
+  profileImageUrl     String?
 
-  schoolId                String?
-  accountId               String?
+  schoolId            String?
 
-  invitationCode          String?
-  invitedById             String?
+  accountId           String?
 
-  invitedAt               DateTime?
-  invitationCreatedAt     DateTime        @default(now())
+  invitationCode      String?
+  invitedById         String?
+  invitedAt           DateTime?
+  invitationCreatedAt DateTime?
 
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  parent                  Parent?
-  passwordResets          PasswordReset[]
-  schemeOfWorks           SchemeOfWork[]
-  student                 Student?
-  teacher                 Teacher?
+  parent              Parent?
+  student             Student?
+  teacher             Teacher?
 
-  account                 Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  passwordResets      PasswordReset[]
+  schemeOfWorks       SchemeOfWork[]
 
-  managedSchool           School? @relation("SchoolAdministrator")
-  school                  School? @relation("SchoolMembers", fields: [schoolId], references: [id], onDelete: SetNull)
+  account             Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  managedSchool       School? @relation("SchoolAdministrator")
+  school              School? @relation("SchoolMembers", fields: [schoolId], references: [id], onDelete: SetNull)
+  invitedBy           User? @relation("UserInvitations", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedUsers        User[] @relation("UserInvitations")
 
-  invitedBy               User? @relation( "UserInvitations", fields: [invitedById], references: [id], onDelete: SetNull)
-
-  invitedUsers            User[] @relation("UserInvitations")
+  referredPayments      Payment[] @relation("UserReferredPayments")
+  commissions           Commission[] @relation("UserCommissions")
 }
 
 
@@ -67,43 +69,50 @@ model PasswordReset {
   @@index([userId])
 }
 
+
 model Account {
-  id                   String                @id @default(uuid())
-  accountType          AccountType           @default(INDIVIDUAL)
-  createdAt            DateTime              @default(now())
-  payments             Payment[]
-  students             Student[]
-  subscriptions        Subscription[]
-  subscriptionUsages   SubscriptionUsage[]
-  unlockedVideoLessons UnlockedVideoLesson[]
-  users                User[]
+  id                    String                @id @default(uuid())
+  accountType           AccountType           @default(INDIVIDUAL)
+
+  createdAt             DateTime              @default(now())
+
+  users                 User[]
+  students              Student[]
+
+  payments              Payment[]
+  subscriptions         Subscription[]
+  subscriptionUsages    SubscriptionUsage[]
+  unlockedVideoLessons  UnlockedVideoLesson[]
 }
+
 
 model School {
   id                    String       @id @default(uuid())
   userId                String?      @unique
 
-  name                  String?     
-  schoolEmail           String?        @unique
+  name                  String?
+  schoolEmail           String?      @unique
   schoolPhoneContact    String?
   address               String?
   website               String?
   subdomain             String?      @unique
+
+  commissionRate        Decimal      @default(20.00) @db.Decimal(5, 2)
 
   status                SchoolStatus @default(PRE_REGISTERED)
 
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
-  user                  User? @relation("SchoolAdministrator", fields: [userId], references: [id], onDelete: SetNull)
 
-  users                 User[] @relation("SchoolMembers")
+  user                 User? @relation("SchoolAdministrator", fields: [userId], references: [id], onDelete: SetNull)
+  users                User[] @relation("SchoolMembers")
 
-  parents               Parent[]
-  schemeOfWorks         SchemeOfWork[]
-  students              Student[]
-  teachers              Teacher[]
+  students             Student[]
+  teachers             Teacher[]
+  schemeOfWorks        SchemeOfWork[]
 }
+
 
 model Teacher {
   id          String   @id @default(uuid())
@@ -119,69 +128,83 @@ model Teacher {
   user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+
 model Parent {
-  id                          String    @id @default(uuid())
-  phone                       String?
-  firstName                   String?
-  lastName                    String?
-  profileImageUrl             String?
-  profilePasswordHash         String?
-  profileResetCodeHash        String?
-  profileResetExpiresAt       DateTime?
-  profileResetAttempts        Int      @default(0)
-  
-  userId                      String?   @unique
-  schoolId                    String?
-  school                      School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
-  user                        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  students                    Student[]
+  id                    String    @id @default(uuid())
+
+  phone                 String?
+  firstName             String?
+  lastName              String?
+  profileImageUrl       String?
+
+  profilePasswordHash   String?
+  profileResetCodeHash  String?
+  profileResetExpiresAt DateTime?
+  profileResetAttempts  Int       @default(0)
+
+  userId                String?   @unique
+  user                  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students              Student[]
 }
 
+
 model Student {
-  id                          String @id @default(uuid())
-  firstName                   String?
-  lastName                    String?
-  age                         Int?
-  classLevel                  String?
-  gender                      String?
-  category                    String?
-  phone                       String?
-  schoolAttended              String?
-  studentImageUrl             String?
-  profilePasswordHash          String?
-  parentId                    String?
-  classId                     String?
-  userId                      String?                  @unique
-  accountId                   String?
-  schoolId                    String?
-  createdAt                   DateTime                 @default(now())
-  updatedAt                   DateTime                 @updatedAt
-  studentSubjects             StudentSubject[]
-  lessonContents              LessonNote[]
-  tutorMemories               TutorMemory[]
-  dailyChallengeProgresses    DailyChallengeProgress[]
-  millionaireAttempts         MillionaireAttempt[]
-  lessonprogresses                  StudentLessonProgress[]
-  quizAttempts                QuizAttempt[]
-  speedChallengeAttempts      SpeedChallengeAttempt[]
-  account                     Account?                 @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  class                       Class?                   @relation(fields: [classId], references: [id], onDelete: SetNull)
-  parent                      Parent?                  @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  school                      School?                  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
-  user                        User?                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  studentAchievements         StudentAchievement[]
-  studentProfile              StudentProfile?
-  studentScores               StudentScore[]
-  subjectRankings             SubjectRanking[]
-  topicAnalytics              TopicAnalytics[]
-  tutorConversations          TutorConversation[]
-  tutorLessonProgresses       TutorLessonProgress[]
-  tutorLessonSessions         TutorLessonSession[]
-  tutorLearningInsights       TutorLearningInsight?
-  tutorLearningProfiles       TutorLearningProfile?
-  tutorPreferences            TutorPreference?
-  tutorSessionSummaries       TutorSessionSummary[]
-  tutorTopicProgresses        TutorTopicProgress[]
+  id                       String    @id @default(uuid())
+
+  firstName                String?
+  lastName                 String?
+  age                      Int?
+  classLevel               String?
+  gender                   String?
+  category                 String?
+  phone                   String?
+
+  schoolAttended           String?
+  studentImageUrl          String?
+
+  profilePasswordHash      String?
+
+  parentId                 String?
+  classId                  String?
+  userId                   String?   @unique
+  accountId                String?
+
+  schoolId                 String?
+
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  parent                   Parent? @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  account                  Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  school                   School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  class                    Class? @relation(fields: [classId], references: [id], onDelete: SetNull)
+  user                     User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  studentSubjects          StudentSubject[]
+
+  lessonContents           LessonNote[]
+  tutorMemories            TutorMemory[]
+  dailyChallengeProgresses DailyChallengeProgress[]
+  millionaireAttempts      MillionaireAttempt[]
+  lessonprogresses         StudentLessonProgress[]
+  quizAttempts             QuizAttempt[]
+  speedChallengeAttempts   SpeedChallengeAttempt[]
+
+  studentAchievements      StudentAchievement[]
+  studentProfile           StudentProfile?
+  studentScores            StudentScore[]
+  subjectRankings          SubjectRanking[]
+  topicAnalytics           TopicAnalytics[]
+
+  tutorConversations       TutorConversation[]
+  tutorLessonProgresses    TutorLessonProgress[]
+  tutorLessonSessions      TutorLessonSession[]
+
+  tutorLearningInsights    TutorLearningInsight?
+  tutorLearningProfiles    TutorLearningProfile?
+  tutorPreferences         TutorPreference?
+  tutorSessionSummaries    TutorSessionSummary[]
+  tutorTopicProgresses     TutorTopicProgress[]
 }
 
 model StudentProfile {
@@ -562,24 +585,6 @@ model TopicAnalytics {
 }
 
 
-model Subscription {
-  id                 String               @id @default(uuid())
-  accountId          String?               @unique
-  subscriptionPlanId String?
-  status             SubscriptionStatus
-  duration           SubscriptionDuration
-  startsAt           DateTime
-  endsAt             DateTime?
-  numberOfTerms      Int
-  amountPaid         Decimal              @db.Decimal(10, 2)
-  isLifetime         Boolean              @default(false)
-  createdAt          DateTime             @default(now())
-
-  payments           Payment[]
-  account            Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  subscriptionPlan   SubscriptionPlan?     @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
-}
-
 model SubscriptionPlan {
   id                             String                    @id @default(uuid())
   subscriptionPlanName           SubscriptionPlanType      @unique
@@ -604,29 +609,121 @@ model SubscriptionPlan {
 }
 
 
-model Payment {
-  id                    String          @id @default(uuid())
-  accountId             String?
-  subscriptionId        String?
-  subscriptionPlanId    String?
-  reference             String          @unique
-  paystackTransactionId BigInt?         @unique
-  amount                Decimal         @db.Decimal(10, 2)
-  numberOfTerms         Int?
-  currency              String
-  provider              PaymentProvider
-  status                PaymentStatus
-  paidAt                DateTime?
-  createdAt             DateTime        @default(now())
+model Subscription {
+  id                 String               @id @default(uuid())
 
-  account               Account?         @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  subscription          Subscription?   @relation(fields: [subscriptionId], references: [id])
-  subscriptionPlan      SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+  accountId          String?              @unique
+  subscriptionPlanId String?
+
+  status             SubscriptionStatus
+  duration           SubscriptionDuration
+
+  startsAt           DateTime
+  endsAt             DateTime?
+
+  numberOfTerms      Int
+  amountPaid         Decimal              @db.Decimal(10, 2)
+
+  isLifetime         Boolean              @default(false)
+
+  createdAt          DateTime             @default(now())
+
+  account            Account?             @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  subscriptionPlan   SubscriptionPlan?    @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+
+  payments            Payment[]
+}
+
+
+model Payment {
+  id                       String               @id @default(uuid())
+
+  accountId                String?
+  referredByUserId         String?
+
+  subscriptionId           String?
+  subscriptionPlanId       String?
+
+  reference                String               @unique
+
+  paystackTransactionId    BigInt?              @unique
+  flutterwaveTransactionId BigInt?              @unique
+
+  amount                   Decimal              @db.Decimal(10, 2)
+  numberOfTerms            Int?
+  currency                 String
+
+  provider                 PaymentProvider
+  status                   PaymentStatus
+
+  paidAt                   DateTime?
+  createdAt                DateTime             @default(now())
+
+  account                  Account?             @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  referredBy               User?                @relation("UserReferredPayments", fields: [referredByUserId], references: [id], onDelete: SetNull)
+
+  subscription             Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  subscriptionPlan         SubscriptionPlan?    @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+  commission               Commission?
+  paymentEvents            PaymentEvent[]
 
   @@index([accountId])
+  @@index([referredByUserId])
   @@index([subscriptionId])
   @@index([subscriptionPlanId])
   @@index([status])
+  @@index([provider])
+}
+
+
+model Commission {
+  id                String              @id @default(uuid())
+
+  referrerUserId    String
+
+  paymentId         String              @unique
+
+  referrerRole      Role
+
+  percentage        Decimal             @db.Decimal(5, 2)
+
+  paymentAmount     Decimal             @db.Decimal(10, 2)
+  commissionAmount  Decimal             @db.Decimal(10, 2)
+  currency          String              @default("NGN")
+
+  status            CommissionStatus    @default(AVAILABLE)
+
+  createdAt         DateTime             @default(now())
+  paidAt            DateTime?
+
+  referrer          User                @relation("UserCommissions", fields: [referrerUserId], references: [id], onDelete: Restrict)
+
+  payment           Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([referrerUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+
+model PaymentEvent {
+  id          String          @id @default(uuid())
+
+  provider    PaymentProvider
+  eventId     String
+  eventType   String
+
+  paymentId   String?
+  payload     Json?
+
+  createdAt   DateTime        @default(now())
+  payment     Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([paymentId])
+  @@index([provider])
 }
 
 
@@ -642,6 +739,7 @@ model SubscriptionUsage {
 
   @@unique([accountId, feature])
 }
+
 
 model UnlockedVideoLesson {
   id         String   @id @default(uuid())
@@ -932,7 +1030,7 @@ model StudentLessonProgress {
 enum Role {
   SUPERADMIN
   ADMIN
-  SCHOOL
+  SCHOOL_ADMIN
   TEACHER
   PARENT
   STUDENT
@@ -985,6 +1083,12 @@ enum SubscriptionDuration {
   TERM
   BITERM
   YEARLY
+}
+
+enum CommissionStatus {
+  AVAILABLE
+  PAID
+  CANCELLED
 }
 
 enum SubscriptionUsageFeature {

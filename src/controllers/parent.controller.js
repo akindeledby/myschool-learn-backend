@@ -2,7 +2,7 @@ import { db } from "../../lib/db.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-import { sendEmail } from "../../src/services/email.service.js";
+import { sendPasswordEmail } from "../../src/services/email.service.js";
 
 // ============================================================
 // CONSTANTS
@@ -31,6 +31,970 @@ function hashResetCode(code) {
     .update(code)
     .digest("hex");
 }
+
+
+// export async function getProfiles(req, res) {
+//   try {
+//     /*
+//      * =========================================================
+//      * 1. AUTHENTICATED USER
+//      * =========================================================
+//      */
+
+//     const userId = req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Authentication required.",
+//       });
+//     }
+
+//     /*
+//      * =========================================================
+//      * 2. FETCH PARENT USER
+//      *
+//      * We fetch:
+//      *
+//      * - Parent profile
+//      * - Account
+//      * - Invitation/referral information
+//      * =========================================================
+//      */
+
+//     const user = await db.user.findUnique({
+//       where: {
+//         id: userId,
+//       },
+
+//       include: {
+//         parent: true,
+//         account: true,
+//       },
+//     });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found.",
+//       });
+//     }
+
+//     /*
+//      * =========================================================
+//      * 3. VERIFY PARENT
+//      * =========================================================
+//      */
+
+//     if (!user.parent) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Only parents can access profiles.",
+//       });
+//     }
+
+//     /*
+//      * =========================================================
+//      * 4. VERIFY ACCOUNT
+//      * =========================================================
+//      */
+
+//     if (!user.accountId) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "No account attached to parent.",
+//       });
+//     }
+
+//     /*
+//      * =========================================================
+//      * 5. FRONTEND URL
+//      * =========================================================
+//      */
+
+//     const frontendUrl =
+//       process.env.FRONTEND_URL ||
+//       "https://myschoollearn.com";
+
+//     /*
+//      * =========================================================
+//      * 6. INVITATION CODE
+//      *
+//      * The parent referral identity is the authenticated User.
+//      *
+//      * User.invitationCode
+//      * =========================================================
+//      */
+
+//     const invitationCode =
+//       user.invitationCode || null;
+
+//     /*
+//      * =========================================================
+//      * 7. INVITATION LINK
+//      * =========================================================
+//      */
+
+//     const invitationLink = invitationCode
+//       ? `${frontendUrl}/register?invitationCode=${encodeURIComponent(
+//           invitationCode
+//         )}`
+//       : null;
+
+//     /*
+//      * =========================================================
+//      * 8. PARENT STUDENTS
+//      *
+//      * Students belonging to the parent's account.
+//      * =========================================================
+//      */
+
+//     const students = await db.student.findMany({
+//       where: {
+//         accountId: user.accountId,
+//       },
+
+//       orderBy: {
+//         firstName: "asc",
+//       },
+//     });
+
+//     const totalStudentsAdded = students.length;
+
+//     /*
+//      * =========================================================
+//      * 9. ACTIVE SUBSCRIPTION
+//      * =========================================================
+//      */
+
+//     const subscription =
+//       await db.subscription.findFirst({
+//         where: {
+//           accountId: user.accountId,
+
+//           status: "ACTIVE",
+
+//           OR: [
+//             {
+//               endsAt: null,
+//             },
+//             {
+//               endsAt: {
+//                 gt: new Date(),
+//               },
+//             },
+//           ],
+//         },
+
+//         include: {
+//           subscriptionPlan: true,
+//         },
+
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//       });
+
+//     /*
+//      * =========================================================
+//      * 10. INVITED USERS
+//      *
+//      * Anyone whose User.invitedById is this parent's
+//      * user ID registered through the parent's invitation.
+//      * =========================================================
+//      */
+
+//     const invitedUsers =
+//       await db.user.findMany({
+//         where: {
+//           invitedById: user.id,
+//         },
+
+//         select: {
+//           id: true,
+//           email: true,
+//           firstName: true,
+//           lastName: true,
+//           role: true,
+//           accountId: true,
+//           schoolId: true,
+//           createdAt: true,
+//         },
+
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//       });
+
+//     const invitedUserCount =
+//       invitedUsers.length;
+
+//     /*
+//      * =========================================================
+//      * 11. REFERRED PAYMENTS
+//      *
+//      * Payment.referredByUserId identifies payments generated
+//      * through this parent's invitation/referral.
+//      *
+//      * Only successful payments are counted.
+//      * =========================================================
+//      */
+
+//     const referredPayments =
+//       await db.payment.findMany({
+//         where: {
+//           referredByUserId: user.id,
+//           status: "SUCCESS",
+//         },
+
+//         select: {
+//           id: true,
+//           accountId: true,
+//           amount: true,
+//           currency: true,
+//           reference: true,
+//           createdAt: true,
+//           paidAt: true,
+
+//           subscriptionPlan: {
+//             select: {
+//               subscriptionPlanName: true,
+//             },
+//           },
+//         },
+
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//       });
+
+//     /*
+//      * =========================================================
+//      * 12. UNIQUE SUBSCRIBED ACCOUNTS
+//      *
+//      * One referred user/account may make multiple payments.
+//      *
+//      * Therefore we count unique account IDs rather than
+//      * counting payment records directly.
+//      * =========================================================
+//      */
+
+//     const subscribedAccountIds =
+//       new Set(
+//         referredPayments
+//           .map(
+//             (payment) =>
+//               payment.accountId
+//           )
+//           .filter(Boolean)
+//       );
+
+//     const subscribedUsers =
+//       subscribedAccountIds.size;
+
+//     /*
+//      * =========================================================
+//      * 13. REFERRAL CONVERSION RATE
+//      *
+//      * subscribed accounts / invited users
+//      * =========================================================
+//      */
+
+//     const conversionRate =
+//       getPercentage(
+//         subscribedUsers,
+//         invitedUserCount
+//       );
+
+//     /*
+//      * =========================================================
+//      * 14. COMMISSIONS
+//      * =========================================================
+//      */
+
+//     const commissions =
+//       await db.commission.findMany({
+//         where: {
+//           referrerUserId: user.id,
+//         },
+
+//         select: {
+//           id: true,
+//           paymentId: true,
+//           percentage: true,
+//           paymentAmount: true,
+//           commissionAmount: true,
+//           currency: true,
+//           status: true,
+//           createdAt: true,
+//           paidAt: true,
+//         },
+
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//       });
+
+//     /*
+//      * =========================================================
+//      * 15. TOTAL COMMISSION EARNINGS
+//      * =========================================================
+//      */
+
+//     const totalEarnings =
+//       commissions.reduce(
+//         (total, commission) =>
+//           total +
+//           toNumber(
+//             commission.commissionAmount
+//           ),
+//         0
+//       );
+
+//     /*
+//      * =========================================================
+//      * 16. AVAILABLE / PENDING PAYOUT
+//      *
+//      * Based on Commission.status = AVAILABLE.
+//      * =========================================================
+//      */
+
+//     const pendingPayout =
+//       commissions
+//         .filter(
+//           (commission) =>
+//             commission.status ===
+//             "AVAILABLE"
+//         )
+//         .reduce(
+//           (total, commission) =>
+//             total +
+//             toNumber(
+//               commission.commissionAmount
+//             ),
+//           0
+//         );
+
+//     /*
+//      * =========================================================
+//      * 17. COMMISSION RATE
+//      *
+//      * We use the most recent commission percentage if
+//      * available.
+//      *
+//      * Otherwise this remains 0.
+//      *
+//      * IMPORTANT:
+//      * Historical commissions retain their own percentage.
+//      * =========================================================
+//      */
+
+//     const latestCommission =
+//       commissions[0] || null;
+
+//     const commissionRate =
+//       latestCommission
+//         ? toNumber(
+//             latestCommission.percentage
+//           )
+//         : 0;
+
+//     /*
+//      * =========================================================
+//      * 18. RECENT REFERRED USERS
+//      * =========================================================
+//      */
+
+//     const recentInvitedUsers =
+//       invitedUsers
+//         .slice(0, 10)
+//         .map((invitedUser) => {
+//           const fullName =
+//             [
+//               invitedUser.firstName,
+//               invitedUser.lastName,
+//             ]
+//               .filter(Boolean)
+//               .join(" ") ||
+//             invitedUser.email;
+
+//           return {
+//             id: invitedUser.id,
+
+//             name: fullName,
+
+//             firstName:
+//               invitedUser.firstName,
+
+//             lastName:
+//               invitedUser.lastName,
+
+//             email:
+//               invitedUser.email,
+
+//             role:
+//               invitedUser.role,
+
+//             accountId:
+//               invitedUser.accountId,
+
+//             schoolId:
+//               invitedUser.schoolId,
+
+//             createdAt:
+//               invitedUser.createdAt,
+
+//             time:
+//               formatRelativeTime(
+//                 invitedUser.createdAt
+//               ),
+//           };
+//         });
+
+//     /*
+//      * =========================================================
+//      * 19. RECENT PAYMENTS
+//      * =========================================================
+//      */
+
+//     const recentPayments =
+//       referredPayments
+//         .slice(0, 10)
+//         .map((payment) => ({
+//           id: payment.id,
+
+//           accountId:
+//             payment.accountId,
+
+//           amount:
+//             toNumber(payment.amount),
+
+//           amountFormatted:
+//             formatCurrency(
+//               payment.amount,
+//               payment.currency ||
+//                 "NGN"
+//             ),
+
+//           currency:
+//             payment.currency ||
+//             "NGN",
+
+//           reference:
+//             payment.reference,
+
+//           planName:
+//             payment.subscriptionPlan
+//               ?.subscriptionPlanName ||
+//             null,
+
+//           status:
+//             "SUCCESS",
+
+//           createdAt:
+//             payment.paidAt ||
+//             payment.createdAt,
+
+//           time:
+//             formatRelativeTime(
+//               payment.paidAt ||
+//                 payment.createdAt
+//             ),
+//         }));
+
+//     /*
+//      * =========================================================
+//      * 20. RECENT COMMISSIONS
+//      * =========================================================
+//      */
+
+//     const recentCommissions =
+//       commissions
+//         .slice(0, 10)
+//         .map((commission) => ({
+//           id: commission.id,
+
+//           paymentId:
+//             commission.paymentId,
+
+//           percentage:
+//             toNumber(
+//               commission.percentage
+//             ),
+
+//           paymentAmount:
+//             toNumber(
+//               commission.paymentAmount
+//             ),
+
+//           paymentAmountFormatted:
+//             formatCurrency(
+//               commission.paymentAmount,
+//               commission.currency ||
+//                 "NGN"
+//             ),
+
+//           commissionAmount:
+//             toNumber(
+//               commission.commissionAmount
+//             ),
+
+//           commissionAmountFormatted:
+//             formatCurrency(
+//               commission.commissionAmount,
+//               commission.currency ||
+//                 "NGN"
+//             ),
+
+//           currency:
+//             commission.currency ||
+//             "NGN",
+
+//           status:
+//             commission.status,
+
+//           createdAt:
+//             commission.createdAt,
+
+//           paidAt:
+//             commission.paidAt,
+
+//           time:
+//             formatRelativeTime(
+//               commission.createdAt
+//             ),
+//         }));
+
+//     /*
+//      * =========================================================
+//      * 21. REGISTRATION OVERVIEW
+//      *
+//      * Last 7 days.
+//      * =========================================================
+//      */
+
+//     const now = new Date();
+
+//     const registrationOverview = [];
+
+//     for (
+//       let index = 6;
+//       index >= 0;
+//       index--
+//     ) {
+//       const day = new Date(now);
+
+//       day.setHours(
+//         0,
+//         0,
+//         0,
+//         0
+//       );
+
+//       day.setDate(
+//         day.getDate() - index
+//       );
+
+//       const nextDay =
+//         new Date(day);
+
+//       nextDay.setDate(
+//         nextDay.getDate() + 1
+//       );
+
+//       const registrationsForDay =
+//         invitedUsers.filter(
+//           (invitedUser) => {
+//             const created =
+//               new Date(
+//                 invitedUser.createdAt
+//               );
+
+//             return (
+//               created >= day &&
+//               created < nextDay
+//             );
+//           }
+//         ).length;
+
+//       const subscriptionsForDay =
+//         new Set(
+//           referredPayments
+//             .filter((payment) => {
+//               const paymentDate =
+//                 new Date(
+//                   payment.paidAt ||
+//                     payment.createdAt
+//                 );
+
+//               return (
+//                 paymentDate >= day &&
+//                 paymentDate < nextDay
+//               );
+//             })
+//             .map(
+//               (payment) =>
+//                 payment.accountId
+//             )
+//             .filter(Boolean)
+//         ).size;
+
+//       registrationOverview.push({
+//         date:
+//           day.toISOString(),
+
+//         day:
+//           day.toLocaleDateString(
+//             "en-NG",
+//             {
+//               weekday: "short",
+//             }
+//           ),
+
+//         registrations:
+//           registrationsForDay,
+
+//         subscriptions:
+//           subscriptionsForDay,
+//       });
+//     }
+
+//     /*
+//      * =========================================================
+//      * 22. RECENT ACTIVITY
+//      * =========================================================
+//      */
+
+//     const activities = [];
+
+//     /*
+//      * ---------------------------------------------------------
+//      * INVITED USERS
+//      * ---------------------------------------------------------
+//      */
+
+//     for (
+//       const invitedUser of recentInvitedUsers
+//     ) {
+//       activities.push({
+//         id:
+//           `registration-${invitedUser.id}`,
+
+//         type:
+//           "registration",
+
+//         title:
+//           "New referral registered",
+
+//         description:
+//           `${invitedUser.name} registered using your invitation code`,
+
+//         createdAt:
+//           invitedUser.createdAt,
+
+//         time:
+//           invitedUser.time,
+//       });
+//     }
+
+//     /*
+//      * ---------------------------------------------------------
+//      * PAYMENTS
+//      * ---------------------------------------------------------
+//      */
+
+//     for (
+//       const payment of recentPayments
+//     ) {
+//       activities.push({
+//         id:
+//           `payment-${payment.id}`,
+
+//         type:
+//           "subscription",
+
+//         title:
+//           "Referred subscription",
+
+//         description:
+//           `${
+//             payment.planName ||
+//             "Subscription"
+//           } payment of ${
+//             payment.amountFormatted
+//           } was completed`,
+
+//         createdAt:
+//           payment.createdAt,
+
+//         time:
+//           payment.time,
+//       });
+//     }
+
+//     /*
+//      * ---------------------------------------------------------
+//      * COMMISSIONS
+//      * ---------------------------------------------------------
+//      */
+
+//     for (
+//       const commission of recentCommissions
+//     ) {
+//       activities.push({
+//         id:
+//           `commission-${commission.id}`,
+
+//         type:
+//           "commission",
+
+//         title:
+//           "Commission earned",
+
+//         description:
+//           `You earned ${commission.commissionAmountFormatted} from a referred subscription`,
+
+//         createdAt:
+//           commission.createdAt,
+
+//         time:
+//           commission.time,
+//       });
+//     }
+
+//     /*
+//      * Sort all activities newest first.
+//      */
+
+//     activities.sort(
+//       (a, b) =>
+//         new Date(
+//           b.createdAt
+//         ).getTime() -
+//         new Date(
+//           a.createdAt
+//         ).getTime()
+//     );
+
+//     const recentActivity =
+//       activities.slice(0, 15);
+
+//     /*
+//      * =========================================================
+//      * 23. RESPONSE
+//      * =========================================================
+//      */
+
+//     return res.status(200).json({
+//       success: true,
+
+//       parent: {
+//         id:
+//           user.parent.id,
+
+//         firstName:
+//           user.firstName ||
+//           user.parent.firstName ||
+//           null,
+
+//         lastName:
+//           user.lastName ||
+//           user.parent.lastName ||
+//           null,
+
+//         email:
+//           user.email,
+
+//         phone:
+//           user.parent.phone ||
+//           user.phone ||
+//           null,
+
+//         profileImageUrl:
+//           user.profileImageUrl ||
+//           user.parent.profileImageUrl ||
+//           null,
+
+//         role:
+//           user.role,
+//       },
+
+//       /*
+//        * =======================================================
+//        * INVITATION / REFERRAL INFORMATION
+//        * =======================================================
+//        */
+
+//       invitation: {
+//         invitationCode,
+
+//         invitationLink,
+
+//         invitationCreatedAt:
+//           user.invitationCreatedAt,
+
+//         invitedAt:
+//           user.invitedAt,
+
+//         totalInvitedUsers:
+//           invitedUserCount,
+
+//         totalSubscribedUsers:
+//           subscribedUsers,
+
+//         conversionRate,
+//       },
+
+//       /*
+//        * =======================================================
+//        * SUBSCRIPTION
+//        * =======================================================
+//        */
+
+//       subscription: {
+//         planName:
+//           subscription
+//             ?.subscriptionPlan
+//             ?.subscriptionPlanName ||
+//           null,
+
+//         status:
+//           subscription?.status ||
+//           null,
+
+//         startsAt:
+//           subscription?.startsAt ||
+//           null,
+
+//         endsAt:
+//           subscription?.endsAt ||
+//           null,
+
+//         subscriptionPlan:
+//           subscription
+//             ?.subscriptionPlan ||
+//           null,
+//       },
+
+//       /*
+//        * Keep the original simple subscription value
+//        * for backwards compatibility with the existing
+//        * frontend if it currently expects:
+//        *
+//        * subscription: "Plan Name"
+//        */
+//       subscriptionName:
+//         subscription
+//           ?.subscriptionPlan
+//           ?.subscriptionPlanName ||
+//         null,
+
+//       /*
+//        * =======================================================
+//        * STUDENTS
+//        * =======================================================
+//        */
+
+//       students,
+
+//       totalStudentsAdded,
+
+//       /*
+//        * =======================================================
+//        * REFERRAL / COMMISSION SUMMARY
+//        * =======================================================
+//        */
+
+//       referral: {
+//         invitedUsers:
+//           invitedUserCount,
+
+//         subscribedUsers,
+
+//         conversionRate,
+
+//         commissionRate,
+
+//         totalEarnings:
+//           roundNumber(
+//             totalEarnings,
+//             2
+//           ),
+
+//         totalEarningsFormatted:
+//           formatCurrency(
+//             totalEarnings
+//           ),
+
+//         pendingPayout:
+//           roundNumber(
+//             pendingPayout,
+//             2
+//           ),
+
+//         pendingPayoutFormatted:
+//           formatCurrency(
+//             pendingPayout
+//           ),
+//       },
+
+//       /*
+//        * =======================================================
+//        * REFERRED USERS
+//        * =======================================================
+//        */
+
+//       invitedUsers: recentInvitedUsers,
+
+//       /*
+//        * =======================================================
+//        * PAYMENTS
+//        * =======================================================
+//        */
+
+//       payments: recentPayments,
+
+//       /*
+//        * =======================================================
+//        * COMMISSIONS
+//        * =======================================================
+//        */
+
+//       commissions:
+//         recentCommissions,
+
+//       /*
+//        * =======================================================
+//        * ACTIVITY
+//        * =======================================================
+//        */
+
+//       activity:
+//         recentActivity,
+
+//       /*
+//        * =======================================================
+//        * 7-DAY REGISTRATION/SUBSCRIPTION ANALYTICS
+//        * =======================================================
+//        */
+
+//       registrations:
+//         registrationOverview,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "[getProfiles] ERROR:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message:
+//         error?.message ||
+//         "Failed to fetch profiles.",
+//     });
+//   }
+// }
 
 export async function getProfiles(
   req,
@@ -92,13 +1056,6 @@ export async function getProfiles(
         },
       });
 
-    // const totalUsersInvited =
-    //   await db.user.count({
-    //     where: {
-    //       invitedby:
-    //         user.id,
-    //     },
-    //   });
 
     const subscription = await db.subscription.findFirst({
       where: {
@@ -137,7 +1094,6 @@ export async function getProfiles(
       subscription: subscription?.subscriptionPlan.subscriptionPlanName || null,
       students,
       totalStudentsAdded,
-      // totalUsersInvited
     });
 
   } catch (error) {
@@ -692,7 +1648,7 @@ export async function requestParentProfilePasswordReset(req, res) {
     // =========================================================
 
     try {
-      await sendEmail({
+      await sendPasswordEmail({
         to: email,
 
         subject:
