@@ -31,7 +31,7 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "SILVER_INDIVIDUAL",
 
-      pricePerTerm: 3500,
+      pricePerTerm: 500,
 
       pricePerSession: 9500,
 
