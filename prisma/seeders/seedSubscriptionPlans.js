@@ -31,7 +31,7 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "SILVER_INDIVIDUAL",
 
-      pricePerTerm: 500,
+      pricePerTerm: 3500,
 
       pricePerSession: 9500,
 
@@ -57,7 +57,7 @@ export async function seedSubscriptionPlans() {
 
       pricePerTerm: 6000,
 
-      pricePerSession: 17000,
+      pricePerSession: 16000,
 
       maxStudents: 1,
 
@@ -152,7 +152,7 @@ export async function seedSubscriptionPlans() {
 
       pricePerTerm: 22000,
 
-      pricePerSession: 60000,
+      pricePerSession: 61000,
 
       maxStudents: 4,
 
@@ -174,9 +174,9 @@ export async function seedSubscriptionPlans() {
       subscriptionPlanName:
         "GOLD_FAMILY",
 
-      pricePerTerm: 35000,
+      pricePerTerm: 30000,
 
-      pricePerSession: 95000,
+      pricePerSession: 85000,
 
       maxStudents: 5,
 
