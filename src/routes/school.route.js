@@ -1,7 +1,7 @@
 import express from "express";
 
 import {
-  getRegisteredSchools, getSchoolProfile,
+  getRegisteredSchools, getSchoolProfile, updateSchoolProfile, updateBankAccount
 } from "../controllers/school.controller.js";
 
 import {
@@ -20,5 +20,9 @@ router.get(
   authMiddleWare(["SCHOOL_ADMIN"]),
   getSchoolProfile
 );
+
+router.put("/updateSchoolProfile", authMiddleWare(["SCHOOL_ADMIN"]), updateSchoolProfile);
+
+router.put("/updateBankAccount", authMiddleWare(["SCHOOL_ADMIN"]), updateBankAccount);
 
 export default router;

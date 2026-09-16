@@ -28,10 +28,11 @@ import challengeRoutes from "./src/routes/gamification/challenge.routes.js";
 import subscriptionPlanRoutes from "./src/routes/subscriptionPlans.routes.js";
 import pricePageSubscriptionPlanRoutes from "./src/routes/pricePageSubscriptionPlans.route.js";
 
-import paymentRoutes from "./src/routes/payment.routes.js";
-import verifyPaymentRoutes from "./src/routes/verifyPayment.routes.js";
-import paystackWebhookRoutes from "./src/routes/paystackWebhook.routes.js";
-import flutterwaveWebhookRoutes from "./src/routes/flutterwaveWebhook.routes.js";
+import paymentRoutes from "./src/routes/payment/payment.routes.js";
+import verifyPaymentRoutes from "./src/routes/payment/verifyPayment.routes.js";
+import paystackWebhookRoutes from "./src/routes/payment/paystackWebhook.routes.js";
+import flutterwaveWebhookRoutes from "./src/routes/payment/flutterwaveWebhook.routes.js";
+import nigeriaBankRoutes from "./src/routes/payment/banks.routes.js";
 
 import { tenantMiddleware } from "./src/middleware/tenantMiddleware.js";
 import { authMiddleWare } from "./src/middleware/auth.middleware.js";
@@ -45,15 +46,6 @@ app.use(
   })
 );
 
-
-// ======================================================
-// PAYSTACK WEBHOOK
-// ======================================================
-// IMPORTANT:
-// This MUST come before express.json() so that the
-// webhook route can capture the original raw request body
-// for Paystack HMAC SHA512 signature verification.
-// ======================================================
 
 app.use(
   "/api/payment/webhook/paystack",
@@ -137,7 +129,7 @@ app.use("/api/gamification/achievements", achievementRoutes);
 app.use("/api/gamification/challenges", challengeRoutes);
 app.use("/api/subscription-plans", subscriptionPlanRoutes);
 app.use("/api/payment", paymentRoutes);
-
+app.use("/api/banks", nigeriaBankRoutes);
 
 const PORT = process.env.PORT || 5000;
 

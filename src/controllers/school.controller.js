@@ -1,20 +1,4 @@
 import { db } from "../../lib/db.js";
-/*
- * GET /api/school/dashboard
- *
- * Returns the complete dashboard data for the authenticated school.
- *
- * Important:
- * The school administrator's User record is the referral source.
- *
- * User.invitationCode
- *        ↓
- * User.invitedById
- *        ↓
- * Commission.referrerUserId
- *
- * School.userId identifies the administrator of the school.
- */
 
 function toNumber(value) {
   if (value === null || value === undefined) {
@@ -123,11 +107,6 @@ function getPercentage(
 
 export async function getSchoolProfile(req, res) {
   try {
-    /*
-     * =========================================================
-     * 1. AUTHENTICATED USER
-     * =========================================================
-     */
 
     const userId = req.user?.userId;
 
@@ -137,16 +116,6 @@ export async function getSchoolProfile(req, res) {
         message: "Authentication required.",
       });
     }
-
-    /*
-     * =========================================================
-     * 2. FIND SCHOOL
-     *
-     * Prefer the school supplied by tenantMiddleware.
-     * Otherwise find the school belonging to the authenticated
-     * school administrator.
-     * =========================================================
-     */
 
     let school = null;
 
@@ -199,12 +168,6 @@ export async function getSchoolProfile(req, res) {
       });
     }
 
-    /*
-     * =========================================================
-     * 3. AUTHORIZE SCHOOL ADMINISTRATOR
-     * =========================================================
-     */
-
     const authenticatedUser = await db.user.findUnique({
       where: {
         id: userId,
@@ -239,15 +202,6 @@ export async function getSchoolProfile(req, res) {
       });
     }
 
-    /*
-     * =========================================================
-     * 4. REFERRAL INFORMATION
-     *
-     * The school's referral identity is the administrator's
-     * User record.
-     * =========================================================
-     */
-
     const referralUserId = school.userId;
 
     const invitationCode =
@@ -263,13 +217,6 @@ export async function getSchoolProfile(req, res) {
         )}`
       : null;
 
-    /*
-     * =========================================================
-     * 5. FETCH SCHOOL STUDENTS
-     *
-     * Student.schoolId is the authoritative relationship.
-     * =========================================================
-     */
 
     const students = await db.student.findMany({
       where: {
@@ -303,22 +250,9 @@ export async function getSchoolProfile(req, res) {
       .map((student) => student.userId)
       .filter(Boolean);
 
-    /*
-     * These variables are intentionally retained because they
-     * may be useful for future dashboard analytics.
-     */
     void studentIds;
     void studentUserIds;
 
-    /*
-     * =========================================================
-     * 6. INVITED USERS
-     *
-     * Users who registered through the school's referral identity.
-     *
-     * User.invitedById = school.userId
-     * =========================================================
-     */
 
     const invitedUsers = await db.user.findMany({
       where: {
@@ -342,14 +276,6 @@ export async function getSchoolProfile(req, res) {
     });
 
     const invitedUserCount = invitedUsers.length;
-
-    /*
-     * =========================================================
-     * 7. SUCCESSFUL REFERRED PAYMENTS
-     *
-     * Payment.referredByUserId identifies the referrer.
-     * =========================================================
-     */
 
     const referredPayments = await db.payment.findMany({
       where: {
@@ -378,15 +304,6 @@ export async function getSchoolProfile(req, res) {
       },
     });
 
-    /*
-     * =========================================================
-     * 8. UNIQUE SUBSCRIBED ACCOUNTS
-     *
-     * Multiple payments can belong to one account, so payments
-     * must not be counted directly as subscribed users.
-     * =========================================================
-     */
-
     const subscribedAccountIds = new Set(
       referredPayments
         .map((payment) => payment.accountId)
@@ -396,30 +313,11 @@ export async function getSchoolProfile(req, res) {
     const subscribedUsers =
       subscribedAccountIds.size;
 
-    /*
-     * =========================================================
-     * 9. CONVERSION
-     *
-     * Since User.invitedById is created when a user successfully
-     * registers through the school's invitation mechanism,
-     * invitedUserCount already represents successful registrations.
-     *
-     * Subscription conversion is therefore:
-     *
-     * subscribed accounts / referred registered users
-     * =========================================================
-     */
-
     const conversionRate = getPercentage(
       subscribedUsers,
       invitedUserCount
     );
 
-    /*
-     * =========================================================
-     * 10. COMMISSIONS
-     * =========================================================
-     */
 
     const commissions = await db.commission.findMany({
       where: {
@@ -443,11 +341,6 @@ export async function getSchoolProfile(req, res) {
       },
     });
 
-    /*
-     * =========================================================
-     * 11. TOTAL EARNINGS
-     * =========================================================
-     */
 
     const totalEarnings = commissions.reduce(
       (total, commission) =>
@@ -458,11 +351,6 @@ export async function getSchoolProfile(req, res) {
       0
     );
 
-    /*
-     * =========================================================
-     * 12. PENDING / AVAILABLE PAYOUT
-     * =========================================================
-     */
 
     const pendingPayout = commissions
       .filter(
@@ -478,36 +366,10 @@ export async function getSchoolProfile(req, res) {
         0
       );
 
-    /*
-     * =========================================================
-     * 13. CURRENT COMMISSION RATE
-     *
-     * School.commissionRate = current rate.
-     *
-     * Commission.percentage = historical rate captured when
-     * the commission was created.
-     * =========================================================
-     */
 
     const commissionRate = toNumber(
       school.commissionRate
     );
-
-    /*
-     * =========================================================
-     * 14. CLASS ANALYTICS
-     *
-     * IMPORTANT:
-     *
-     * Your Prisma Class model does NOT contain a `level` field.
-     *
-     * Therefore we only select fields that actually exist:
-     *
-     *   id
-     *   name
-     *
-     * =========================================================
-     */
 
     const classStudentCounts =
       await db.student.groupBy({
@@ -601,12 +463,6 @@ export async function getSchoolProfile(req, res) {
       }
     );
 
-    /*
-     * =========================================================
-     * 15. OVERALL SCHOOL PERFORMANCE
-     * =========================================================
-     */
-
     const activeStudents =
       students.filter(
         (student) =>
@@ -640,11 +496,6 @@ export async function getSchoolProfile(req, res) {
         registeredStudents
       );
 
-    /*
-     * =========================================================
-     * 16. RECENT ACTIVITY
-     * =========================================================
-     */
 
     const recentRegisteredUsers =
       invitedUsers.slice(0, 10);
@@ -656,12 +507,6 @@ export async function getSchoolProfile(req, res) {
       commissions.slice(0, 10);
 
     const activities = [];
-
-    /*
-     * ---------------------------------------------------------
-     * NEW REGISTRATIONS
-     * ---------------------------------------------------------
-     */
 
     for (
       const user of recentRegisteredUsers
@@ -703,11 +548,6 @@ export async function getSchoolProfile(req, res) {
       });
     }
 
-    /*
-     * ---------------------------------------------------------
-     * SUCCESSFUL SUBSCRIPTIONS
-     * ---------------------------------------------------------
-     */
 
     for (
       const payment of recentSuccessfulPayments
@@ -735,12 +575,6 @@ export async function getSchoolProfile(req, res) {
       });
     }
 
-    /*
-     * ---------------------------------------------------------
-     * COMMISSIONS
-     * ---------------------------------------------------------
-     */
-
     for (
       const commission of recentCommissions
     ) {
@@ -761,10 +595,6 @@ export async function getSchoolProfile(req, res) {
           commission.createdAt,
       });
     }
-
-    /*
-     * Sort newest activity first.
-     */
 
     activities.sort(
       (a, b) =>
@@ -793,13 +623,6 @@ export async function getSchoolProfile(req, res) {
             ),
         }));
 
-    /*
-     * =========================================================
-     * 17. REGISTRATION / SUBSCRIPTION OVERVIEW
-     *
-     * Last 7 calendar days.
-     * =========================================================
-     */
 
     const now = new Date();
 
@@ -830,10 +653,6 @@ export async function getSchoolProfile(req, res) {
         nextDay.getDate() + 1
       );
 
-      /*
-       * Users registered through this school's invitation code.
-       */
-
       const registrationsForDay =
         invitedUsers.filter(
           (user) => {
@@ -849,9 +668,6 @@ export async function getSchoolProfile(req, res) {
           }
         ).length;
 
-      /*
-       * Successful subscription accounts for the day.
-       */
 
       const accountsSubscribedThatDay =
         new Set(
@@ -889,12 +705,6 @@ export async function getSchoolProfile(req, res) {
             }
           ),
 
-        /*
-         * Since invitations are currently represented by
-         * successful registrations through User.invitedById,
-         * these two values are equivalent.
-         */
-
         invitations:
           registrationsForDay,
 
@@ -906,21 +716,10 @@ export async function getSchoolProfile(req, res) {
       });
     }
 
-    /*
-     * =========================================================
-     * 18. RESPONSE
-     * =========================================================
-     */
-
     return res.status(200).json({
       success: true,
 
       data: {
-        /*
-         * -----------------------------------------------------
-         * SCHOOL
-         * -----------------------------------------------------
-         */
 
         school: {
           id: school.id,
@@ -953,15 +752,18 @@ export async function getSchoolProfile(req, res) {
 
           commissionRate,
 
+          bankAccountName:
+            school.bankAccountName,
+
+          accountNumber:
+            school.accountNumber,
+
+          bankName: 
+            school.bankName,
+
           createdAt:
             school.createdAt,
         },
-
-        /*
-         * -----------------------------------------------------
-         * ADMINISTRATOR
-         * -----------------------------------------------------
-         */
 
         administrator:
           school.user
@@ -983,11 +785,6 @@ export async function getSchoolProfile(req, res) {
               }
             : null,
 
-        /*
-         * -----------------------------------------------------
-         * OVERVIEW
-         * -----------------------------------------------------
-         */
 
         overview: {
           registeredStudents,
@@ -1008,12 +805,6 @@ export async function getSchoolProfile(req, res) {
               totalEarnings
             ),
         },
-
-        /*
-         * -----------------------------------------------------
-         * SUBSCRIPTIONS
-         * -----------------------------------------------------
-         */
 
         subscriptions: {
           planName:
@@ -1042,29 +833,11 @@ export async function getSchoolProfile(req, res) {
             null,
         },
 
-        /*
-         * -----------------------------------------------------
-         * REGISTRATIONS
-         * -----------------------------------------------------
-         */
-
         registrations:
           registrationOverview,
 
-        /*
-         * -----------------------------------------------------
-         * ACTIVITY
-         * -----------------------------------------------------
-         */
-
         activity:
           recentActivity,
-
-        /*
-         * -----------------------------------------------------
-         * PERFORMANCE
-         * -----------------------------------------------------
-         */
 
         performance: {
           activeStudents,
@@ -1075,12 +848,6 @@ export async function getSchoolProfile(req, res) {
 
           averageEngagement,
         },
-
-        /*
-         * -----------------------------------------------------
-         * CLASSES
-         * -----------------------------------------------------
-         */
 
         classes,
       },
@@ -1097,6 +864,98 @@ export async function getSchoolProfile(req, res) {
       message:
         error?.message ||
         "Unable to load school profile.",
+    });
+  }
+}
+
+export async function updateSchoolProfile(req, res) {
+  try {
+    const userId = req.user.userId;
+
+    const user =
+      await db.user.findUnique({
+        where: {
+          id: userId
+        },
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "User profile not found.",
+      });
+    }
+
+    const {
+      name,
+      schoolEmail,
+      schoolPhoneContact,
+    } = req.body;
+
+    // ---------------------------------------------------------
+    // 2. Clean values
+    // ---------------------------------------------------------
+
+    const cleanName = String(name).trim();
+    const cleanSchoolEmail = String(schoolEmail).trim();
+    const cleanSchoolPhoneContact = String(schoolPhoneContact).trim();
+
+
+    // ---------------------------------------------------------
+    // 6. Make sure school exists
+    // ---------------------------------------------------------
+
+    const school = await db.school.findUnique({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!school) {
+      return res.status(404).json({
+        success: false,
+        message: "School account not found.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 7. Save bank details
+    // ---------------------------------------------------------
+
+    const updatedSchool = await db.school.update({
+      where: {
+        id: school.id,
+      },
+      data: {
+        name: cleanName,
+        schoolEmail: cleanSchoolEmail,
+        schoolPhoneContact: cleanSchoolPhoneContact,
+      },
+    });
+
+    // ---------------------------------------------------------
+    // 8. Return saved details
+    // ---------------------------------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "School details saved successfully.",
+      bankAccount: updatedSchool,
+    });
+  } catch (error) {
+    console.error(
+      "Error saving school details:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "An unexpected error occurred while saving school details.",
     });
   }
 }
@@ -1139,6 +998,180 @@ export async function getRegisteredSchools(req, res) {
     return res.status(500).json({
       success: false,
       message: "Unable to fetch schools.",
+    });
+  }
+}
+
+
+export async function updateBankAccount(req, res) {
+  try {
+    const userId = req.user.userId;
+
+    const user =
+      await db.user.findUnique({
+        where: {
+          id: userId
+        },
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "User profile not found.",
+      });
+    }
+
+    const {
+      accountNumber,
+      accountName,
+      bankName,
+      bankCode,
+    } = req.body;
+
+    // ---------------------------------------------------------
+    // 1. Validate required fields
+    // ---------------------------------------------------------
+
+    if (!accountNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Account number is required.",
+      });
+    }
+
+    if (!accountName) {
+      return res.status(400).json({
+        success: false,
+        message: "Account name is required.",
+      });
+    }
+
+    if (!bankName) {
+      return res.status(400).json({
+        success: false,
+        message: "Bank name is required.",
+      });
+    }
+
+    if (!bankCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Bank code is required.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 2. Clean values
+    // ---------------------------------------------------------
+
+    const cleanAccountNumber = String(accountNumber).trim();
+    const cleanAccountName = String(accountName).trim();
+    const cleanBankName = String(bankName).trim();
+    const cleanBankCode = String(bankCode).trim();
+
+    // ---------------------------------------------------------
+    // 3. Validate account number
+    // ---------------------------------------------------------
+
+    if (!/^\d{10}$/.test(cleanAccountNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: "Account number must be exactly 10 digits.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 4. Validate account name
+    // ---------------------------------------------------------
+
+    if (cleanAccountName.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid account name.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 5. Validate bank details
+    // ---------------------------------------------------------
+
+    if (cleanBankName.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid bank name.",
+      });
+    }
+
+    if (!/^\d+$/.test(cleanBankCode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid bank code.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 6. Make sure school exists
+    // ---------------------------------------------------------
+
+    const school = await db.school.findUnique({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!school) {
+      return res.status(404).json({
+        success: false,
+        message: "School account not found.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 7. Save bank details
+    // ---------------------------------------------------------
+
+    const updatedSchool = await db.school.update({
+      where: {
+        id: school.id,
+      },
+      data: {
+        accountNumber: cleanAccountNumber,
+        bankAccountName: cleanAccountName,
+        bankName: cleanBankName,
+        bankCode: cleanBankCode,
+      },
+      select: {
+        id: true,
+        accountNumber: true,
+        bankAccountName: true,
+        bankName: true,
+        bankCode: true,
+      },
+    });
+
+    // ---------------------------------------------------------
+    // 8. Return saved details
+    // ---------------------------------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Bank account details saved successfully.",
+      bankAccount: updatedSchool,
+    });
+  } catch (error) {
+    console.error(
+      "Error saving school bank account:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "An unexpected error occurred while saving the bank account details.",
     });
   }
 }

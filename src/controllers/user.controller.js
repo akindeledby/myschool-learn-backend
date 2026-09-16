@@ -40,6 +40,9 @@ export async function fetchUserProfile(req, res) {
         phone: true,
         role: true,
         profileImageUrl: true,
+        bankAccountName: true,
+        accountNumber: true,
+        bankName: true,
 
         invitationCode: true,
         invitedById: true,
@@ -715,6 +718,15 @@ export async function fetchUserProfile(req, res) {
         profileImageUrl:
           user.profileImageUrl,
 
+        bankAccountName: 
+          user.bankAccountName,
+        
+        accountNumber: 
+          user.accountNumber,
+        
+        bankName: 
+          user.bankName,
+
         invitationCode:
           user.invitationCode,
 
@@ -1232,6 +1244,153 @@ export async function updatePhone(req, res) {
       success: false,
       message:
         "Failed to update phone",
+    });
+  }
+}
+
+
+
+export async function updateBankAccount(req, res) {
+  try {
+    const userId = req.user.userId;
+
+    const { 
+      accountNumber,
+      accountName,
+      bankName,
+      bankCode
+    } = req.body;
+
+    const user =
+      await db.user.findUnique({
+        where: {
+          id: userId
+        },
+      });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "User profile not found.",
+      });
+    }
+
+
+    // ---------------------------------------------------------
+    // 1. Validate required fields
+    // ---------------------------------------------------------
+
+    if (!accountNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Account number is required.",
+      });
+    }
+
+    if (!accountName) {
+      return res.status(400).json({
+        success: false,
+        message: "Account name is required.",
+      });
+    }
+
+    if (!bankName) {
+      return res.status(400).json({
+        success: false,
+        message: "Bank name is required.",
+      });
+    }
+
+    if (!bankCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Bank code is required.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 2. Clean values
+    // ---------------------------------------------------------
+
+    const cleanAccountNumber = String(accountNumber).trim();
+    const cleanAccountName = String(accountName).trim();
+    const cleanBankName = String(bankName).trim();
+    const cleanBankCode = String(bankCode).trim();
+
+    // ---------------------------------------------------------
+    // 3. Validate account number
+    // ---------------------------------------------------------
+
+    if (!/^\d{10}$/.test(cleanAccountNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: "Account number must be exactly 10 digits.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 4. Validate account name
+    // ---------------------------------------------------------
+
+    if (cleanAccountName.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid account name.",
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 5. Validate bank details
+    // ---------------------------------------------------------
+
+    if (cleanBankName.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid bank name.",
+      });
+    }
+
+    if (!/^\d+$/.test(cleanBankCode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid bank code.",
+      });
+    }
+
+    const updated = await db.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        accountNumber: cleanAccountNumber,
+        bankAccountName: cleanAccountName,
+        bankName: cleanBankName,
+        bankCode: cleanBankCode,
+      },
+      select: {
+        id: true,
+        accountNumber: true,
+        bankAccountName: true,
+        bankName: true,
+        bankCode: true,
+        },
+      });
+     
+    return res.status(200).json({
+      success: true,
+      data: updated,
+    });
+  } catch (error) {
+    console.error(
+      "Update account number error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to update account number",
     });
   }
 }

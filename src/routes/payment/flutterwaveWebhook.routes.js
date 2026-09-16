@@ -2,7 +2,7 @@ import express from "express";
 
 import {
   flutterwaveWebhookController,
-} from "../controllers/payment/flutterwaveWebhook.controller.js";
+} from "../../controllers/payment/flutterwaveWebhook.controller.js";
 
 const router = express.Router();
 

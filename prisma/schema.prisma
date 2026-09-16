@@ -22,6 +22,10 @@ model User {
   role                Role?
 
   profileImageUrl     String?
+  bankAccountName     String? 
+  accountNumber       String?
+  bankCode            String?
+  bankName            String?
 
   schoolId            String?
 
@@ -95,8 +99,13 @@ model School {
   schoolPhoneContact    String?
   address               String?
   website               String?
-  subdomain             String?      @unique
+  bankAccountName       String? 
+  accountNumber         String?
+  bankCode              String?
+  bankName              String?
 
+
+  subdomain             String?      @unique
   commissionRate        Decimal      @default(20.00) @db.Decimal(5, 2)
 
   status                SchoolStatus @default(PRE_REGISTERED)
