@@ -67,51 +67,6 @@ export async function saveMessage({
   return message;
 }
 
-// export async function saveMessage({
-//   conversationId,
-//   role,
-//   content,
-//   contentBlocks,
-//   images,
-//   audioSegments,
-// }) {
-//   const message =
-//     await db.tutorMessage.create({
-//       data: {
-//         conversationId,
-//         role,
-//         content,
-
-//         contentBlocks:
-//           contentBlocks?.length > 0
-//             ? contentBlocks
-//             : undefined,
-
-//         images:
-//           images?.length > 0
-//             ? images
-//             : undefined,
-
-//         audioSegments:
-//           audioSegments?.length > 0
-//             ? audioSegments
-//             : undefined,
-//       },
-//     });
-
-//   await db.tutorConversation.update({
-//     where: {
-//       id: conversationId,
-//     },
-
-//     data: {
-//       updatedAt: new Date(),
-//     },
-//   });
-
-//   return message;
-// }
-
 
 export async function getConversation(
   conversationId

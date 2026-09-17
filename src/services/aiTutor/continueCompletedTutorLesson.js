@@ -1,15 +1,15 @@
 import { db } from "../../../lib/db.js";
 
 import {
-buildCompletedLessonPrompt,
+  buildCompletedLessonPrompt,
 } from "./buildCompletedLessonPrompt.service.js";
 
 import {
-streamTutorConversationResponse,
+  streamTutorConversationResponse,
 } from "./streamTutorConversationResponse.service.js";
 
 import {
-getTutorStudentContext,
+  getTutorStudentContext,
 } from "./getTutorStudentContext.service.js";
 
 export async function continueCompletedTutorLesson({
