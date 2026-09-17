@@ -175,11 +175,11 @@ Do NOT return JSON.
 
 Use the following Markdown headings when they are appropriate to the student's question.
 
-## Answer:
+## This is the answer for your question(s):
 
 Start with a direct answer in one or two sentences.
 
-## Explanation:
+## Now a detail Explanation:
 
 Explain the concept step by step using language appropriate for ${classLevel}.
 
@@ -204,18 +204,6 @@ Do not force a memory trick when it would not be useful.
 Mention only common mistakes that students actually make.
 
 If there are no common mistakes worth mentioning, omit this section.
-
-## Question for you:
-
-Ask ONE short review question that helps the student confirm they understood.
-
-Do NOT provide the answer.
-
-If a review question would not be appropriate for the assignment, omit this section.
-
-End naturally when the student's question has been fully answered.
-
-Do not add unnecessary closing statements.
 
 =========================
 STUDENT QUESTION

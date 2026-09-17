@@ -100,6 +100,12 @@ export async function fetchStudent(req, res) {
           classId: true,
           schoolId: true,
 
+          studentProfile: {
+            select: {
+              level: true,
+            },
+          },
+
           school: {
             select: {
               name: true,
@@ -180,6 +186,12 @@ export async function fetchStudent(req, res) {
           accountId: true,
           classId: true,
           schoolId: true,
+
+          studentProfile: {
+            select: {
+              level: true,
+            },
+          },
 
           school: {
             select: {
@@ -367,10 +379,8 @@ export async function fetchStudent(req, res) {
         studentImageUrl:
           student.studentImageUrl,
 
-        /*
-         * These are the subjects this particular
-         * student has selected.
-         */
+        playingLevel: 
+          student.studentProfile?.level ?? 1,
 
         subjects:
           selectedSubjectIds,
