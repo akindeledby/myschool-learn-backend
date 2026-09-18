@@ -1290,7 +1290,7 @@ export async function setUserRole(req, res) {
       "teacher",
       "student",
       "parent",
-      "school",
+      "school_admin",
     ];
 
     if (!validRoles.includes(role)) {
@@ -1410,7 +1410,7 @@ export async function setUserRole(req, res) {
       // SCHOOL
       // ==================================================
 
-      if (role === "school") {
+      if (role === "school_admin") {
         if (!schoolName?.trim()) {
           throw new Error("School name is required.");
         }
