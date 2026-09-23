@@ -22,7 +22,7 @@ router.get("/subjects-tutor", authMiddleWare(), getClassSubjectsTutor);
 router.get("/topics/:subjectId", authMiddleWare(), getTopicsBySubject);
 router.get("/video/:topicId", authMiddleWare(), getVideoLesson);
 router.post("/topics/questions", authMiddleWare(), getQuestionsByTopics);
-router.get("/subjects/:subjectId/questions", getQuestionsBySubject);
+router.get("/subjects/:subjectId/questions", authMiddleWare(), getQuestionsBySubject);
 router.get("/terms/:subjectId", authMiddleWare(), getTermsBySubject);
 router.get("/topics/terms/:termId", authMiddleWare(), getTopicsByTerm);
 router.post("/terms/questions", authMiddleWare(), getQuestionsByTerms);

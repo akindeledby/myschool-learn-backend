@@ -1,8 +1,4 @@
-// services/subscription/subscription.constants.js
 
-/**
- * Features that can be protected by a subscription plan.
- */
 export const SUBSCRIPTION_FEATURES = Object.freeze({
   VIDEO_LESSON: "VIDEO_LESSON",
 
@@ -25,6 +21,8 @@ export const SUBSCRIPTION_FEATURES = Object.freeze({
   MILLIONAIRE: "MILLIONAIRE",
 
   LEADERBOARD: "LEADERBOARD",
+
+  OFFLINE_CONTENT: "OFFLINE_CONTENT",
 });
 
 
@@ -75,6 +73,9 @@ export const FEATURE_PLAN_MAPPING = Object.freeze({
 
   [SUBSCRIPTION_FEATURES.LEADERBOARD]:
     "canPartakeInLeaderboardRanking",
+
+  [SUBSCRIPTION_FEATURES.OFFLINE_CONTENT]:
+    "canDownloadOfflineContent",
 });
 
 

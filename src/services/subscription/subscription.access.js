@@ -1,4 +1,4 @@
-// services/subscription/subscription.access.js
+
 
 import { getSubscription } from "./subscription.service.js";
 
@@ -10,13 +10,7 @@ import {
   SUBSCRIPTION_MESSAGES,
 } from "./subscription.constants.js";
 
-/**
- * Checks whether an account is allowed
- * to use a subscription feature.
- *
- * This function only authorizes access.
- * It DOES NOT consume usage.
- */
+
 export async function checkSubscriptionAccess({
   userId,
   studentId,

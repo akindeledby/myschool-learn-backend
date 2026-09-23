@@ -25,6 +25,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: false,
     },
 
     {
@@ -49,6 +50,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -73,6 +75,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -97,6 +100,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: true,
       canPlayMillionaire: true,
       canPartakeInLeaderboardRanking: true,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -120,6 +124,8 @@ export async function seedSubscriptionPlans() {
       canSpeakWithTeacher: false,
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
+      canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: false,
     },
 
     {
@@ -144,6 +150,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -168,6 +175,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -192,6 +200,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: true,
       canPlayMillionaire: true,
       canPartakeInLeaderboardRanking: true,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -214,6 +223,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
       canPartakeInLeaderboardRanking: false,
+      canDownloadOfflineContent: false,
     },
 
     {
@@ -237,7 +247,8 @@ export async function seedSubscriptionPlans() {
       canSpeakWithTeacher: true,
       canPlaySpeedChallange: false,
       canPlayMillionaire: false,
-      canPartakeInLeaderboardRanking: false,
+      canPartakeInLeaderboardRanking: true,
+      canDownloadOfflineContent: true,
     },
 
     {
@@ -262,6 +273,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: true,
       canPlayMillionaire: true,
       canPartakeInLeaderboardRanking: true,
+      canDownloadOfflineContent: true,
     },
 
 
@@ -287,6 +299,7 @@ export async function seedSubscriptionPlans() {
       canPlaySpeedChallange: true,
       canPlayMillionaire: true,
       canPartakeInLeaderboardRanking: true,
+      canDownloadOfflineContent: true,
     },
   ];
 

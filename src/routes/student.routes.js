@@ -1,5 +1,5 @@
 import express from "express";
-import { getStudentProfile, fetchStudent, updateStudentSubjects,
+import { getStudentProfile, fetchStudentProfile, updateStudentSubjects,
   saveTestScore, saveExamScore, 
   fetchStudentScores, getMyAchievements,   
   updateName, updatePhone,
@@ -10,14 +10,14 @@ import { authMiddleWare } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/fetchStudentProfile", fetchStudent);
-router.post("/update-name", updateName);
-router.post("/update-phone", updatePhone);
-router.post("/update-school-name", updateSchool);
-router.post("/upload-image-url", uploadStudentImageUrl);
-router.post("/student-scores/test", saveTestScore);
-router.post("/student-scores/exam", saveExamScore);
-router.get("/fetch-scores", fetchStudentScores);
+router.get("/fetchStudentProfile", authMiddleWare(), fetchStudentProfile);
+router.post("/update-name", authMiddleWare(), updateName);
+router.post("/update-phone", authMiddleWare(), updatePhone);
+router.post("/update-school-name", authMiddleWare(), updateSchool);
+router.post("/upload-image-url", authMiddleWare(), uploadStudentImageUrl);
+router.post("/student-scores/test", authMiddleWare(), saveTestScore);
+router.post("/student-scores/exam", authMiddleWare(), saveExamScore);
+router.get("/fetch-scores", authMiddleWare(), fetchStudentScores);
 router.get("/achievements", authMiddleWare(), getMyAchievements);
 router.get("/profile", authMiddleWare(), getStudentProfile);
 router.put("/promote-child", authMiddleWare(), promoteChild);

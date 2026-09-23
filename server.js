@@ -25,6 +25,8 @@ import leaderboardRoutes from "./src/routes/gamification/leaderboard.routes.js";
 import achievementRoutes from "./src/routes/gamification/achievements.routes.js";
 import challengeRoutes from "./src/routes/gamification/challenge.routes.js";
 
+import offlineRoutes from "./src/routes/offline.routes.js";
+
 import subscriptionPlanRoutes from "./src/routes/subscriptionPlans.routes.js";
 import pricePageSubscriptionPlanRoutes from "./src/routes/pricePageSubscriptionPlans.route.js";
 
@@ -132,6 +134,7 @@ app.use("/api/gamification/challenges", challengeRoutes);
 app.use("/api/subscription-plans", subscriptionPlanRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/banks", nigeriaBankRoutes);
+app.use("/api/offline", offlineRoutes);
 
 const PORT = process.env.PORT || 5000;
 

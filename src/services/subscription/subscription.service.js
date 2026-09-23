@@ -1,4 +1,3 @@
-// services/subscription/subscription.service.js
 
 import { db } from "../../../lib/db.js";
 

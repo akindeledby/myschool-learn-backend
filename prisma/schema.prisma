@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -216,6 +216,22 @@ model Student {
   tutorTopicProgresses     TutorTopicProgress[]
 }
 
+
+model StudentSubject {
+  studentId String
+  subjectId String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([studentId, subjectId])
+  @@index([subjectId])
+}
+
+
 model StudentProfile {
   id           String   @id @default(uuid())
   studentId    String   @unique
@@ -232,20 +248,19 @@ model StudentProfile {
   student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
-model StudentSubject {
-  studentId String
-  subjectId String
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+model OfflineTestSubmission {
+  id              String   @id @default(uuid())
+  studentId       String
+  clientAttemptId String
+  quizId          String?
+  payloadHash     String
+  result          Json
+  createdAt       DateTime @default(now())
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@id([studentId, subjectId])
-  @@index([subjectId])
+  @@unique([studentId, clientAttemptId])
+  @@index([studentId])
 }
-
 
 model StudentScore {
   id                  String   @id @default(uuid())
@@ -595,23 +610,25 @@ model TopicAnalytics {
 
 
 model SubscriptionPlan {
-  id                             String                    @id @default(uuid())
-  subscriptionPlanName           SubscriptionPlanType      @unique
-  pricePerTerm                   Decimal                   @db.Decimal(10, 2)
-  pricePerSession                Decimal?                  @db.Decimal(10, 2)
-  maxStudents                    Int
-  videoLessonLimit               Int?
-  homeHelperLimit                Int?
-  canTakeTest                    Boolean                   @default(false)
-  canPracticeForExam             Boolean                   @default(false)
-  canPracticeForQuiz             Boolean                   @default(false)
-  canSpeakWithTeacher            Boolean                   @default(false)
-  canChatWithLearningAssistant   Boolean                   @default(false)
-  canPlayCardGame                Boolean                   @default(false)
-  canPlaySpeedChallange          Boolean                   @default(false)
-  canPlayMillionaire             Boolean                   @default(false)
-  canPartakeInLeaderboardRanking Boolean                   @default(false)
-  createdAt                      DateTime                  @default(now())
+  id                                  String  @id @default(uuid())
+  subscriptionPlanName                SubscriptionPlanType      @unique
+  pricePerTerm                        Decimal @db.Decimal(10, 2)
+  pricePerSession                     Decimal?  @db.Decimal(10, 2)
+  maxStudents                         Int
+  videoLessonLimit                    Int?
+  homeHelperLimit                     Int?
+  canTakeTest                         Boolean @default(false)
+  canPracticeForExam                  Boolean @default(false)
+  canPracticeForQuiz                  Boolean @default(false)
+  canSpeakWithTeacher                 Boolean @default(false)
+  canChatWithLearningAssistant        Boolean @default(false)
+  canPlayCardGame                     Boolean @default(false)
+  canPlaySpeedChallange               Boolean @default(false)
+  canPlayMillionaire                  Boolean @default(false)
+  canPartakeInLeaderboardRanking      Boolean @default(false)
+
+  canDownloadOfflineContent           Boolean @default(false)
+  createdAt                           DateTime @default(now())
 
   subscriptions                 Subscription[]
   payments                      Payment[]
@@ -619,9 +636,9 @@ model SubscriptionPlan {
 
 
 model Subscription {
-  id                 String               @id @default(uuid())
+  id                 String @id @default(uuid())
 
-  accountId          String?              @unique
+  accountId          String?  @unique
   subscriptionPlanId String?
 
   status             SubscriptionStatus

@@ -98,618 +98,6 @@ async function createAccountWithFreemium(
 }
 
 
-// ===================== GOOGLE LOGIN =====================
-export async function googleAuth(req, res) {
-  try {
-    const {
-      email,
-      name,
-      googleId,
-      invitationCode,
-    } = req.body;
-
-    /*
-     * ---------------------------------------------
-     * BASIC VALIDATION
-     * ---------------------------------------------
-     */
-
-    if (!email || !googleId) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Google email and Google ID are required.",
-      });
-    }
-
-    const normalizedEmail =
-      String(email)
-        .trim()
-        .toLowerCase();
-
-    const cleanInvitationCode =
-      typeof invitationCode === "string"
-        ? invitationCode
-            .trim()
-            .toUpperCase()
-        : "";
-
-    /*
-     * ---------------------------------------------
-     * FIND EXISTING GOOGLE USER
-     * ---------------------------------------------
-     */
-
-    let user = await db.user.findFirst({
-      where: {
-        OR: [
-          {
-            googleId,
-          },
-          {
-            email: normalizedEmail,
-          },
-        ],
-      },
-    });
-
-    /*
-     * ---------------------------------------------
-     * EXISTING USER
-     * ---------------------------------------------
-     *
-     * IMPORTANT:
-     *
-     * We DO NOT overwrite invitedById here.
-     *
-     * A user's original referrer should remain
-     * unchanged on subsequent Google logins.
-     */
-
-    if (user) {
-      /*
-       * If this is an existing account that was
-       * originally created without Google but is
-       * now connecting Google, you may want to
-       * attach googleId if it is empty.
-       */
-
-      if (!user.googleId) {
-        user = await db.user.update({
-          where: {
-            id: user.id,
-          },
-
-          data: {
-            googleId,
-          },
-        });
-      }
-    }
-
-    /*
-     * ---------------------------------------------
-     * NEW USER
-     * ---------------------------------------------
-     */
-
-    if (!user) {
-      /*
-       * Resolve invitation code on the backend.
-       *
-       * NEVER trust a frontend-supplied invitedById.
-       */
-
-      let invitingUser = null;
-
-      if (cleanInvitationCode) {
-        invitingUser =
-          await db.user.findFirst({
-            where: {
-              invitationCode:
-                cleanInvitationCode,
-            },
-
-            select: {
-              id: true,
-              role: true,
-              invitationCode: true,
-            },
-          });
-
-        if (!invitingUser) {
-          return res.status(400).json({
-            success: false,
-            error:
-              "The invitation code is invalid or no longer available.",
-          });
-        }
-      }
-
-      /*
-       * Generate the new user's own
-       * invitation code.
-       */
-
-      const newInvitationCode =
-        await generateUniqueInvitationCode();
-
-      /*
-       * Create the Google user.
-       *
-       * invitedById points to the USER who
-       * owns the invitation code.
-       */
-
-      user = await db.user.create({
-        data: {
-          email: normalizedEmail,
-
-          /*
-           * Adjust this if your existing Google
-           * user creation uses a different name
-           * structure.
-           */
-
-          firstName:
-            typeof name === "string"
-              ? name.trim().split(" ")[0] ||
-                ""
-              : "",
-
-          lastName:
-            typeof name === "string"
-              ? name
-                  .trim()
-                  .split(" ")
-                  .slice(1)
-                  .join(" ")
-              : "",
-
-          googleId,
-
-          password: null,
-
-          /*
-           * Keep your existing role behavior.
-           * New Google users can complete role
-           * selection afterward.
-           */
-
-          role: null,
-
-          /*
-           * Keep your existing school behavior
-           * if your current controller determines
-           * a domain school here.
-           *
-           * Replace this with your existing
-           * domainSchoolId logic if applicable.
-           */
-
-          schoolId:
-            typeof domainSchoolId !==
-            "undefined"
-              ? domainSchoolId
-              : null,
-
-          /*
-           * GENERALIZED REFERRAL SYSTEM
-           */
-
-          invitationCode:
-            newInvitationCode,
-
-          invitationCreatedAt:
-            new Date(),
-
-          invitedById:
-            invitingUser?.id ?? null,
-
-          invitedAt:
-            invitingUser
-              ? new Date()
-              : null,
-        },
-      });
-    }
-
-    /*
-     * ---------------------------------------------
-     * CREATE BACKEND ACCESS TOKEN
-     * ---------------------------------------------
-     *
-     * Keep your existing JWT/token generation
-     * implementation here.
-     */
-
-    const accessToken =
-      generateAccessToken(user);
-
-    /*
-     * ---------------------------------------------
-     * RESPONSE
-     * ---------------------------------------------
-     */
-
-    return res.status(200).json({
-      success: true,
-
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-      },
-
-      accessToken,
-
-      requiresRoleSelection:
-        !user.role,
-    });
-  } catch (error) {
-    console.error(
-      "Google authentication error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      error:
-        "An error occurred during Google authentication.",
-    });
-  }
-}
-
-
-// ===================== REGISTER =====================
-// export async function register(req, res) {
-//   try {
-//     const {
-//       firstName,
-//       lastName,
-//       email,
-//       password,
-//       invitationCode,
-//       schoolId: selectedSchoolId,
-//     } = req.body;
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 1. Basic validation
-//      * ---------------------------------------------------------
-//      */
-
-//     if (!firstName || !lastName || !email || !password) {
-//       return res.status(400).json({
-//         success: false,
-//         error: "All required fields must be provided.",
-//       });
-//     }
-
-//     const cleanFirstName = firstName.trim();
-//     const cleanLastName = lastName.trim();
-//     const cleanEmail = email.trim().toLowerCase();
-//     const cleanPassword = password.trim();
-
-//     const cleanInvitationCode =
-//       typeof invitationCode === "string"
-//         ? invitationCode.trim().toUpperCase()
-//         : "";
-
-//     if (!cleanFirstName || !cleanLastName || !cleanEmail) {
-//       return res.status(400).json({
-//         success: false,
-//         error: "First name, last name, and email are required.",
-//       });
-//     }
-
-//     if (cleanPassword.length < 6) {
-//       return res.status(400).json({
-//         success: false,
-//         error: "Password must be at least 6 characters long.",
-//       });
-//     }
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 2. Resolve school context
-//      * ---------------------------------------------------------
-//      *
-//      * schoolId and invitedById have different meanings.
-//      *
-//      * schoolId:
-//      *   Which school is this user associated with?
-//      *
-//      * invitedById:
-//      *   Which MySchoolLearn user referred this user?
-//      *
-//      * They must not be used interchangeably.
-//      */
-
-//     const domainSchoolId = req.school?.id || null;
-
-//     let effectiveSchoolId = domainSchoolId || null;
-
-//     /*
-//      * If registration is not happening through a school
-//      * subdomain, use the school selected during registration.
-//      */
-
-//     if (!domainSchoolId && selectedSchoolId) {
-//       const selectedSchool = await db.school.findUnique({
-//         where: {
-//           id: selectedSchoolId,
-//         },
-//         select: {
-//           id: true,
-//         },
-//       });
-
-//       if (!selectedSchool) {
-//         return res.status(400).json({
-//           success: false,
-//           error: "Selected school does not exist.",
-//         });
-//       }
-
-//       effectiveSchoolId = selectedSchool.id;
-//     }
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 3. Resolve referral
-//      * ---------------------------------------------------------
-//      *
-//      * Any eligible MySchoolLearn user can refer another user.
-//      *
-//      * Therefore, the invitation code simply identifies the
-//      * user who referred this new user.
-//      *
-//      * We do NOT use the referrer's schoolId here.
-//      */
-
-//     let invitingUser = null;
-
-//     if (cleanInvitationCode) {
-//       invitingUser = await db.user.findFirst({
-//         where: {
-//           invitationCode: cleanInvitationCode,
-//         },
-//         select: {
-//           id: true,
-//           role: true,
-//           invitationCode: true,
-//         },
-//       });
-
-//       if (!invitingUser) {
-//         return res.status(400).json({
-//           success: false,
-//           error:
-//             "The invitation code is invalid or no longer available.",
-//         });
-//       }
-//     }
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 4. Check whether email already exists
-//      * ---------------------------------------------------------
-//      *
-//      * User.email is globally unique.
-//      *
-//      * Therefore, do NOT check email together with schoolId.
-//      */
-
-//     const existingUser = await db.user.findUnique({
-//       where: {
-//         email: cleanEmail,
-//       },
-//       select: {
-//         id: true,
-//       },
-//     });
-
-//     if (existingUser) {
-//       return res.status(400).json({
-//         success: false,
-//         error: "An account with this email already exists.",
-//       });
-//     }
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 5. Hash password
-//      * ---------------------------------------------------------
-//      */
-
-//     const hashedPassword = await bcrypt.hash(
-//       cleanPassword,
-//       10
-//     );
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 6. Generate this user's own invitation code
-//      * ---------------------------------------------------------
-//      *
-//      * Every registered user gets an invitation code.
-//      *
-//      * This means:
-//      *
-//      * School Admin → Parent
-//      * Teacher      → Parent
-//      * Parent       → Student
-//      * Parent       → Parent
-//      * Student      → Student
-//      * Student      → Parent
-//      *
-//      * and any other referral combination you decide to allow.
-//      */
-
-//     const newInvitationCode =
-//       await generateUniqueInvitationCode();
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 7. Create user
-//      * ---------------------------------------------------------
-//      */
-
-//     const user = await db.user.create({
-//       data: {
-//         firstName: cleanFirstName,
-//         lastName: cleanLastName,
-//         email: cleanEmail,
-//         password: hashedPassword,
-
-//         /*
-//          * Role is selected later.
-//          */
-//         role: null,
-
-//         /*
-//          * School membership / tenant context.
-//          *
-//          * This is independent of referral.
-//          */
-//         schoolId: effectiveSchoolId,
-
-//         /*
-//          * The user's own invitation code.
-//          */
-//         invitationCode: newInvitationCode,
-//         invitationCreatedAt: new Date(),
-
-//         /*
-//          * Referral relationship.
-//          *
-//          * null means the user registered without
-//          * an invitation.
-//          */
-//         invitedById: invitingUser?.id || null,
-//         invitedAt: invitingUser ? new Date() : null,
-//       },
-
-//       select: {
-//         id: true,
-//         email: true,
-//         firstName: true,
-//         lastName: true,
-//         role: true,
-//         schoolId: true,
-//         invitationCode: true,
-//         invitedById: true,
-//         invitedAt: true,
-//         createdAt: true,
-//       },
-//     });
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 8. Generate authentication token
-//      * ---------------------------------------------------------
-//      */
-
-//     const accessToken = jwt.sign(
-//       {
-//         userId: user.id,
-//         role: user.role ?? null,
-//       },
-//       process.env.JWT_SECRET,
-//       {
-//         expiresIn: "7d",
-//       }
-//     );
-
-//     /*
-//      * ---------------------------------------------------------
-//      * 9. Return successful registration
-//      * ---------------------------------------------------------
-//      */
-
-//     return res.status(201).json({
-//       success: true,
-//       message: "Account created successfully.",
-
-//       /*
-//        * The user still needs to select their role.
-//        */
-//       requiresRoleSelection: true,
-
-//       accessToken,
-
-//       user: {
-//         id: user.id,
-//         email: user.email,
-//         firstName: user.firstName,
-//         lastName: user.lastName,
-//         role: user.role,
-//         schoolId: user.schoolId,
-
-//         /*
-//          * This user's own referral code.
-//          */
-//         invitationCode: user.invitationCode,
-
-//         /*
-//          * The user who referred this user.
-//          *
-//          * null when there was no referral.
-//          */
-//         invitedById: user.invitedById,
-//         invitedAt: user.invitedAt,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("REGISTER ERROR:", error);
-
-//     /*
-//      * ---------------------------------------------------------
-//      * Handle Prisma unique constraint errors
-//      * ---------------------------------------------------------
-//      *
-//      * This also protects against race conditions where another
-//      * registration creates the same email between our initial
-//      * check and db.user.create().
-//      */
-
-//     if (error?.code === "P2002") {
-//       const target = error?.meta?.target;
-
-//       if (
-//         Array.isArray(target) &&
-//         target.includes("email")
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           error: "An account with this email already exists.",
-//         });
-//       }
-
-//       if (
-//         Array.isArray(target) &&
-//         target.includes("invitationCode")
-//       ) {
-//         return res.status(500).json({
-//           success: false,
-//           error:
-//             "Unable to generate a unique invitation code. Please try again.",
-//         });
-//       }
-//     }
-
-//     return res.status(500).json({
-//       success: false,
-//       error:
-//         "Unable to create account. Please try again later.",
-//     });
-//   }
-// }
-
-
 export async function register(req, res) {
   try {
     const {
@@ -976,9 +364,6 @@ export async function register(req, res) {
         invitationCode: user.invitationCode,
       });
 
-      console.log(
-        `WELCOME EMAIL SENT: ${user.email}`
-      );
     } catch (emailError) {
       console.error(
         "WELCOME EMAIL ERROR:",
@@ -1070,6 +455,271 @@ export async function register(req, res) {
       success: false,
       error:
         "Unable to create account. Please try again later.",
+    });
+  }
+}
+
+
+// ===================== GOOGLE LOGIN =====================
+export async function googleAuth(req, res) {
+  try {
+    const {
+      email,
+      name,
+      googleId,
+      invitationCode,
+    } = req.body;
+
+    /*
+     * ---------------------------------------------
+     * BASIC VALIDATION
+     * ---------------------------------------------
+     */
+
+    if (!email || !googleId) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Google email and Google ID are required.",
+      });
+    }
+
+    const normalizedEmail =
+      String(email)
+        .trim()
+        .toLowerCase();
+
+    const cleanInvitationCode =
+      typeof invitationCode === "string"
+        ? invitationCode
+            .trim()
+            .toUpperCase()
+        : "";
+
+    /*
+     * ---------------------------------------------
+     * FIND EXISTING GOOGLE USER
+     * ---------------------------------------------
+     */
+
+    let user = await db.user.findFirst({
+      where: {
+        OR: [
+          {
+            googleId,
+          },
+          {
+            email: normalizedEmail,
+          },
+        ],
+      },
+    });
+
+    /*
+     * ---------------------------------------------
+     * EXISTING USER
+     * ---------------------------------------------
+     *
+     * IMPORTANT:
+     *
+     * We DO NOT overwrite invitedById here.
+     *
+     * A user's original referrer should remain
+     * unchanged on subsequent Google logins.
+     */
+
+    if (user) {
+      /*
+       * If this is an existing account that was
+       * originally created without Google but is
+       * now connecting Google, you may want to
+       * attach googleId if it is empty.
+       */
+
+      if (!user.googleId) {
+        user = await db.user.update({
+          where: {
+            id: user.id,
+          },
+
+          data: {
+            googleId,
+          },
+        });
+      }
+    }
+
+    /*
+     * ---------------------------------------------
+     * NEW USER
+     * ---------------------------------------------
+     */
+
+    if (!user) {
+      /*
+       * Resolve invitation code on the backend.
+       *
+       * NEVER trust a frontend-supplied invitedById.
+       */
+
+      let invitingUser = null;
+
+      if (cleanInvitationCode) {
+        invitingUser =
+          await db.user.findFirst({
+            where: {
+              invitationCode:
+                cleanInvitationCode,
+            },
+
+            select: {
+              id: true,
+              role: true,
+              invitationCode: true,
+            },
+          });
+
+        if (!invitingUser) {
+          return res.status(400).json({
+            success: false,
+            error:
+              "The invitation code is invalid or no longer available.",
+          });
+        }
+      }
+
+      /*
+       * Generate the new user's own
+       * invitation code.
+       */
+
+      const newInvitationCode =
+        await generateUniqueInvitationCode();
+
+      /*
+       * Create the Google user.
+       *
+       * invitedById points to the USER who
+       * owns the invitation code.
+       */
+
+      user = await db.user.create({
+        data: {
+          email: normalizedEmail,
+
+          /*
+           * Adjust this if your existing Google
+           * user creation uses a different name
+           * structure.
+           */
+
+          firstName:
+            typeof name === "string"
+              ? name.trim().split(" ")[0] ||
+                ""
+              : "",
+
+          lastName:
+            typeof name === "string"
+              ? name
+                  .trim()
+                  .split(" ")
+                  .slice(1)
+                  .join(" ")
+              : "",
+
+          googleId,
+
+          password: null,
+
+          /*
+           * Keep your existing role behavior.
+           * New Google users can complete role
+           * selection afterward.
+           */
+
+          role: null,
+
+          /*
+           * Keep your existing school behavior
+           * if your current controller determines
+           * a domain school here.
+           *
+           * Replace this with your existing
+           * domainSchoolId logic if applicable.
+           */
+
+          schoolId:
+            typeof domainSchoolId !==
+            "undefined"
+              ? domainSchoolId
+              : null,
+
+          /*
+           * GENERALIZED REFERRAL SYSTEM
+           */
+
+          invitationCode:
+            newInvitationCode,
+
+          invitationCreatedAt:
+            new Date(),
+
+          invitedById:
+            invitingUser?.id ?? null,
+
+          invitedAt:
+            invitingUser
+              ? new Date()
+              : null,
+        },
+      });
+    }
+
+    /*
+     * ---------------------------------------------
+     * CREATE BACKEND ACCESS TOKEN
+     * ---------------------------------------------
+     *
+     * Keep your existing JWT/token generation
+     * implementation here.
+     */
+
+    const accessToken =
+      generateAccessToken(user);
+
+    /*
+     * ---------------------------------------------
+     * RESPONSE
+     * ---------------------------------------------
+     */
+
+    return res.status(200).json({
+      success: true,
+
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+
+      accessToken,
+
+      requiresRoleSelection:
+        !user.role,
+    });
+  } catch (error) {
+    console.error(
+      "Google authentication error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error:
+        "An error occurred during Google authentication.",
     });
   }
 }
@@ -2501,814 +2151,3 @@ export async function resetPassword(
     });
   }
 }
-
-
-
-/////////////////////////////////////////////////////////////////////////////////
-
-// export async function googleAuth(req, res) {
-//   try {
-
-//     const { email, name, googleId } = req.body;
-//     const schoolId =
-//       req.school?.id || null;
-
-//     if (!email) {
-//       return res.status(400).json({
-//         error: "Email required",
-//       });
-//     }
-
-//     let user = await db.user.findUnique({
-//       where: { 
-//         email,
-//         schoolId
-//        },
-//     });
-
-//     // ================= EXISTING USER =================
-//     if (user) {
-//       if (!user.googleId && googleId) {
-//         user = await db.user.update({
-//           where: { email },
-//           data: { googleId },
-//         });
-//       }
-
-//       // ✅ CREATE TOKEN ALWAYS
-//       const accessToken = jwt.sign(
-//         {
-//           userId: user.id,
-//           role: user.role ?? null,
-//         },
-//         process.env.JWT_SECRET,
-//         {
-//           expiresIn: "7d",
-//         }
-//       );
-
-//       // 🚨 ROLE NOT YET SELECTED
-//       if (!user.role) {
-//         return res.json({
-//           user: {
-//             id: user.id,
-//             email: user.email,
-//           },
-//           success: true,
-//           requiresRoleSelection: true,
-//           accessToken,
-//         });
-//       }
-
-//       // ✅ NORMAL LOGIN
-//       return res.json({
-//         success: true,
-//         user,
-//         accessToken,
-//       });
-//     }
-
-//     // ================= NEW USER =================
-//     const newUser = await db.user.create({
-//       data: {
-//         email,
-//         firstName: name?.split(" ")[0] || "Google",
-//         lastName: name?.split(" ")[1] || "",
-//         password: null,
-//         role: null,
-//         googleId: googleId || null,
-//         schoolId: schoolId
-//       },
-//     });
-
-//     const accessToken = jwt.sign(
-//       {
-//         userId: newUser.id,
-//         role: null,
-//       },
-//       process.env.JWT_SECRET,
-//       {
-//         expiresIn: "7d",
-//       }
-//     );
-
-
-//     return res.json({
-//       success: true,
-//       requiresRoleSelection: true,
-//       user: {
-//         id: newUser.id,
-//         email: newUser.email,
-//       },
-//       accessToken,
-//     });
-
-
-//   } catch (error) {
-//     console.error("GOOGLE BACKEND ERROR:", error);
-
-//     return res.status(500).json({
-//       error: error.message,
-//     });
-//   }
-// }
-
-// ===================== REGISTER =====================
-// export async function register(req, res) {
-//   try {
-//     const {
-//       firstName,
-//       lastName,
-//       email,
-//       password,
-//       invitationCode,
-//     } = req.body;
-
-
-//     const schoolId =
-//       req.school?.id || null;
-
-//     if (
-//       !firstName ||
-//       !lastName ||
-//       !email ||
-//       !password
-//     ) {
-//       return res.status(400).json({
-//         error: "All required fields must be provided.",
-//       });
-//     }
-
-
-//     const cleanFirstName = firstName.trim();
-
-//     const cleanLastName = lastName.trim();
-
-//     const cleanEmail = email.trim().toLowerCase();
-
-//     const cleanPassword = password.trim();
-
-//     const cleanInvitationCode =
-//       typeof invitationCode === "string"
-//         ? invitationCode.trim().toUpperCase()
-//         : "";
-
-//     const existingUser =
-//       await db.user.findFirst({
-//         where: {
-//           email: cleanEmail,
-//           ...(schoolId
-//             ? { schoolId }
-//             : {}),
-//         },
-//         select: {
-//           id: true,
-//           email: true,
-//         },
-//       });
-
-//     if (existingUser) {
-//       return res.status(400).json({
-//         error:
-//           "An account with this email already exists.",
-//       });
-//     }
-
-
-//     let invitedById = null;
-
-//     if (cleanInvitationCode) {
-//       const invitingUser =
-//         await db.user.findFirst({
-//           where: {
-//             invitationCode: cleanInvitationCode,
-//           },
-//           select: {
-//             id: true,
-//             invitationCode: true,
-//           },
-//         });
-
-//       if (!invitingUser) {
-//         return res.status(400).json({
-//           error:
-//             "The invitation code is invalid or no longer available.",
-//         });
-//       }
-
-//       invitedById =
-//         invitingUser.id;
-//     }
-
-//     const hashedPassword =
-//       await bcrypt.hash(
-//         cleanPassword,
-//         10
-//       );
-
-//     const newInvitationCode =
-//       await generateUniqueInvitationCode();
-
-//     const user =
-//       await db.user.create({
-//         data: {
-//           firstName: cleanFirstName,
-//           lastName: cleanLastName,
-//           email: cleanEmail,
-//           password: hashedPassword,
-//           role: null,
-//           schoolId,
-//           invitationCode: newInvitationCode,
-//           invitationCreatedAt: new Date(),
-//           invitedById: invitedById,
-//           invitedAt:
-//             invitedById
-//               ? new Date()
-//               : null,
-//         },
-
-//         select: {
-//           id: true,
-//           email: true,
-//           firstName: true,
-//           lastName: true,
-//           invitationCode: true,
-//           invitedById: true,
-//           createdAt: true,
-//         },
-//       });
-
-
-//     // ========================================================
-//     // GENERATE JWT
-//     // ========================================================
-
-//     const accessToken =
-//       jwt.sign(
-//         {
-//           userId: user.id,
-//           role: user.role ?? null,
-//         },
-//         process.env.JWT_SECRET,
-//         {
-//           expiresIn: "7d",
-//         }
-//       );
-
-
-//     // ========================================================
-//     // RESPONSE
-//     // ========================================================
-
-//     return res.status(201).json({
-//       message: "Account created successfully.",
-//       requiresRoleSelection: true,
-//       user: {
-//         id: user.id,
-//         email: user.email,
-//         firstName: user.firstName,
-//         lastName: user.lastName,
-//         invitationCode: user.invitationCode,
-//         invitedById: user.invitedById,
-//       },
-
-//       accessToken,
-//     });
-
-//   } catch (error) {
-
-//     console.error(
-//       "REGISTER ERROR:",
-//       error
-//     );
-
-//     return res.status(500).json({
-//       error:
-//         "Unable to create account. Please try again later.",
-//     });
-//   }
-// }
-
-// // ===================== LOGIN =====================
-// export async function login(req, res) {
-//   try {
-//     const { email, password } = req.body;
-
-//     const schoolId =
-//       req.school?.id || null;
-
-//     if (!email || !password) {
-//       return res.status(400).json({
-//         error:
-//           "Email and password are required",
-//       });
-//     }
-
-//     const passwordTrim = password.trim();
-
-//     const user =
-//       await db.user.findFirst({
-//         where: {
-//           email: email.trim(),
-//           schoolId,
-//         },
-//       });
-    
-
-//     if (!user) {
-//       return res.status(404).json({
-//         error: "User not found",
-//       });
-//     }
-
-//     if (!user.password) {
-//       return res.status(400).json({
-//         error:
-//           "This account uses Google. Please sign in with Google.",
-//       });
-//     }
-
-//     const isValid =
-//       await bcrypt.compare(
-//         passwordTrim,
-//         user.password
-//       );
-
-//     if (!isValid) {
-//       return res.status(401).json({
-//         error:
-//           "Invalid credentials",
-//       });
-//     }
-
-//     const accessToken = jwt.sign(
-//       {
-//         userId: user.id,
-//         role: user.role ?? null,
-//       },
-//         process.env.JWT_SECRET,
-//       {
-//         expiresIn: "7d",
-//       }
-//     );
-
-//     // User has not selected role yet
-//     if (!user.role) {
-//       return res.json({
-//         requiresRoleSelection: true,
-//         accessToken,
-//         user: {
-//           id: user.id,
-//           email: user.email,
-//         },
-//       });
-//     }
-
-//     // Parent must select profile
-//     if (user.role === "PARENT") {
-//       return res.json({
-//         requiresProfileSelection: true,
-//         accessToken,
-//         user,
-//       });
-//     }
-
-//     return res.json({
-//       message:
-//         "Login successful",
-//       accessToken,
-//       user,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       error: error.message,
-//     });
-//   }
-// }
-
-
-// ===================== SET-USER-ROLE =====================
-
-// export async function setUserRole(req, res) {
-//   try {
-//     const domainSchoolId = req.school?.id || null;
-
-//     const {
-//       role,
-//       gender,
-//       teacherCode,
-//       age,
-//       schoolId: selectedSchoolId,
-//       classId,
-//       studentCategory,
-//       subjectTaught,
-//       phoneNumber,
-//       schoolEmail,
-//       schoolPhoneContact,
-//       schoolName,
-//     } = req.body;
-
-//     const effectiveSchoolId = selectedSchoolId || domainSchoolId || null;
-
-//     if (!role) {
-//       return res.status(400).json({
-//         error: "Role is required",
-//       });
-//     }
-
-//     const validRoles = [
-//       "teacher",
-//       "student",
-//       "parent",
-//       "school",
-//     ];
-
-//     if (!validRoles.includes(role)) {
-//       return res.status(400).json({
-//         error: "Invalid role selected",
-//       });
-//     }
-
-//     const existingUser =
-//       await db.user.findUnique({
-//         where: {
-//           id: req.user.userId,
-//         },
-//         include: {
-//           teacher: true,
-//           student: true,
-//           parent: true,
-//           school: true,
-//           account: true,
-//         },
-//       });
-
-//     if (!existingUser) {
-//       return res.status(404).json({
-//         error: "User not found",
-//       });
-//     }
-
-//     let schoolRecord = null;
-
-//     if (effectiveSchoolId) {
-//       schoolRecord = await db.school.findUnique({
-//         where: {
-//           id: effectiveSchoolId,
-//         },
-//       });
-
-//       if (!schoolRecord) {
-//         return res.status(400).json({
-//           error: "Selected school does not exist.",
-//         });
-//       }
-//     }
-
-//     async function createAccountWithFreemium(
-//       tx,
-//       accountType,
-//       subscriptionPlanName
-//     ) {
-//       const account =
-//         await tx.account.create({
-//           data: {
-//             accountType,
-//           },
-//         });
-
-//       const freemiumPlan =
-//         await tx.subscriptionPlan.findUnique({
-//           where: {
-//             subscriptionPlanName,
-//           },
-//         });
-
-//       if (!freemiumPlan) {
-//         throw new Error(
-//           `${subscriptionPlanName} plan not found`
-//         );
-//       }
-
-//       await tx.subscription.create({
-//         data: {
-//           account: {
-//             connect: {
-//               id: account.id,
-//             },
-//           },
-//           subscriptionPlan: {
-//             connect: {
-//               id: freemiumPlan.id,
-//             },
-//           },
-//           status: "ACTIVE",
-//           duration: "LIFETIME",
-//           startsAt: new Date(),
-//           endsAt: null,
-//           numberOfTerms: 0,
-//           amountPaid: 0,
-//         },
-//       });
-
-//       return account;
-//     }
-
-//     const result = await db.$transaction(
-//       async (tx) => {
-//         /**
-//          * SCHOOL ROLE
-//          */
-//         if (role === "school") {
-//           let account = existingUser.account;
-
-//           if (!account) {
-//             account = await createAccountWithFreemium(
-//               tx,
-//               "SCHOOL",
-//               "FREEMIUM_SCHOOL"
-//             );
-//           }
-
-//           const school = await tx.school.upsert({
-//             where: {
-//               schoolEmail: schoolEmail.trim(),
-//             },
-
-//             update: {
-//               name: schoolName.trim(),
-//               schoolPhoneContact:
-//                 schoolPhoneContact?.trim() || phoneNumber,
-//               userId: existingUser.id,
-//             },
-
-//             create: {
-//               name: schoolName.trim(),
-//               schoolEmail: schoolEmail.trim(),
-//               schoolPhoneContact:
-//                 schoolPhoneContact?.trim() || phoneNumber,
-//               userId: existingUser.id,
-//             },
-//           });
-
-//           const updatedUser = await tx.user.update({
-//             where: {
-//               id: existingUser.id,
-//             },
-
-//             data: {
-//               role: "SCHOOL",
-//               accountId: account.id,
-//               schoolId: school.id,
-//             },
-//           });
-
-//           return {
-//             user: updatedUser,
-//             profile: school,
-//             redirectUrl: "/school/dashboard",
-//           };
-//         }
-
-//         /**
-//          * TEACHER ROLE
-//          */
-//         if (role === "teacher") {
-//           if (existingUser.teacher) {
-//             throw new Error(
-//               "Teacher profile already exists"
-//             );
-//           }
-
-//           const updatedUser =
-//             await tx.user.update({
-//               where: {
-//                 id: existingUser.id,
-//               },
-//               data: {
-//                 role: "TEACHER",
-//                 schoolId:
-//                   schoolRecord?.id ||
-//                   null,
-//               },
-//             });
-
-//           const teacher =
-//             await tx.teacher.create({
-//               data: {
-//                 userId:
-//                   existingUser.id,
-//                 schoolId:
-//                   schoolRecord?.id ||
-//                   null,
-//                 gender:
-//                   gender || null,
-//                 teacherCode:
-//                   teacherCode ||
-//                   null,
-//                 subject:
-//                   subjectTaught ||
-//                   null,
-//                 phone:
-//                   phoneNumber ||
-//                   null,
-//               },
-//             });
-
-//           return {
-//             user: updatedUser,
-//             profile: teacher,
-//             redirectUrl:
-//               "/teacher/dashboard",
-//           };
-//         }
-
-//         /**
-//          * STUDENT ROLE
-//          */
-//         if (role === "student") {
-//           if (existingUser.student) {
-//             throw new Error(
-//               "Student profile already exists"
-//             );
-//           }
-
-//           let account =
-//             existingUser.account;
-
-//           if (!account) {
-//             account =
-//               await createAccountWithFreemium(
-//                 tx,
-//                 "INDIVIDUAL",
-//                 "FREEMIUM_INDIVIDUAL"
-//               );
-//           }
-
-//           let classRecord = null;
-//           let classLevel = null;
-
-//           if (classId) {
-//             classRecord =
-//               await tx.class.findUnique({
-//                 where: {
-//                   id: classId,
-//                 },
-//               });
-
-//             if (!classRecord) {
-//               throw new Error(
-//                 "Selected class not found"
-//               );
-//             }
-
-//             classLevel =
-//               classRecord.name ||
-//               classRecord.level ||
-//               null;
-//           }
-
-//           const updatedUser =
-//             await tx.user.update({
-//               where: {
-//                 id: existingUser.id,
-//               },
-//               data: {
-//                 role: "STUDENT",
-//                 accountId:
-//                   account.id,
-//                 schoolId:
-//                   schoolRecord?.id ||
-//                   null,
-//               },
-//             });
-
-//           const student =
-//             await tx.student.create({
-//               data: {
-//                 userId:
-//                   existingUser.id,
-//                 accountId:
-//                   account.id,
-//                 schoolId: schoolRecord?.id || null,
-//                 firstName:
-//                   existingUser.firstName,
-//                 lastName:
-//                   existingUser.lastName,
-//                 gender:
-//                   gender || null,
-//                 age: age
-//                   ? Number(age)
-//                   : null,
-//                 classId:
-//                   classRecord?.id ||
-//                   null,
-//                 classLevel,
-//                 category:
-//                   studentCategory ||
-//                   null,
-//                 phone:
-//                   phoneNumber ||
-//                   null,
-//               },
-//             });
-
-//           return {
-//             user: updatedUser,
-//             profile: student,
-//             studentId:
-//               student.id,
-//             redirectUrl:
-//               "/student/dashboard",
-//           };
-//         }
-
-//         /**
-//          * PARENT ROLE
-//          */
-//         if (role === "parent") {
-//           if (existingUser.parent) {
-//             throw new Error(
-//               "Parent profile already exists"
-//             );
-//           }
-
-//           let account =
-//             existingUser.account;
-
-//           if (!account) {
-//             account =
-//               await createAccountWithFreemium(
-//                 tx,
-//                 "FAMILY",
-//                 "FREEMIUM_FAMILY"
-//               );
-//           }
-
-//           const updatedUser =
-//             await tx.user.update({
-//               where: {
-//                 id: existingUser.id,
-//               },
-//               data: {
-//                 role: "PARENT",
-//                 accountId:
-//                   account.id,
-//                 phone:
-//                   phoneNumber ||
-//                   null,
-//                 schoolId:
-//                   schoolRecord?.id ||
-//                   null,
-//               },
-//             });
-
-//           const parent =
-//             await tx.parent.create({
-//               data: {
-//                 userId:
-//                   existingUser.id,
-//                 schoolId:
-//                   schoolRecord?.id ||
-//                   null,
-//                 phone:
-//                   phoneNumber ||
-//                   null,
-//                 firstName:
-//                   existingUser.firstName,
-//                 lastName:
-//                   existingUser.lastName,
-//               },
-//             });
-
-//           return {
-//             user: updatedUser,
-//             profile: parent,
-//             redirectUrl:
-//               "/parent/dashboard",
-//           };
-//         }
-
-//         throw new Error(
-//           "Unable to process role"
-//         );
-//       }
-//     );
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Profile setup completed successfully",
-//       redirectUrl: result.redirectUrl,
-//       user: result.user,
-//       profile: result.profile,
-//       studentId: result.studentId || null,
-//     });
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       success: false,
-//       error: error.message,
-//     });
-//   }
-// }
