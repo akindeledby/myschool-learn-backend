@@ -879,1567 +879,1567 @@ export async function getStudentProfile(
 }
 
 
-export async function saveTestScore(req, res) {
-  try {
-    const userId = req.user?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        error: "Unauthorized.",
-      });
-    }
-
-    const { studentId } = req.query;
-
-    // ---------------------------------------------------------
-    // 1. Resolve and authorize the student
-    // ---------------------------------------------------------
-    const studentResult = await resolveStudent({
-      userId,
-      studentId,
-    });
-
-    if (!studentResult.success) {
-      return res.status(studentResult.statusCode).json({
-        error: studentResult.message,
-      });
-    }
-
-    const student = studentResult.student;
-
-    // ---------------------------------------------------------
-    // 2. Read request body
-    // ---------------------------------------------------------
-    const {
-      subjectId,
-      termId,
-      noOfQuestions,
-      answers,
-      quizId = null,
-    } = req.body;
-
-    // ---------------------------------------------------------
-    // 3. Basic request validation
-    // ---------------------------------------------------------
-    if (!subjectId) {
-      return res.status(400).json({
-        error: "subjectId is required.",
-      });
-    }
-
-    if (!termId) {
-      return res.status(400).json({
-        error: "termId is required.",
-      });
-    }
-
-    if (
-      !Number.isInteger(noOfQuestions) ||
-      noOfQuestions <= 0
-    ) {
-      return res.status(400).json({
-        error: "noOfQuestions must be a positive integer.",
-      });
-    }
-
-    if (!Array.isArray(answers)) {
-      return res.status(400).json({
-        error: "answers must be an array.",
-      });
-    }
-
-    // ---------------------------------------------------------
-    // 4. Process and grade the test
-    // ---------------------------------------------------------
-    const result = await processTestSubmission({
-      studentId: student.id,
-      subjectId,
-      termId,
-      noOfQuestions,
-      answers,
-      quizId,
-    });
-
-    // ---------------------------------------------------------
-    // 5. Return service result
-    // ---------------------------------------------------------
-    if (!result.success) {
-      return res.status(result.statusCode).json({
-        error: result.message,
-      });
-    }
-
-    return res.status(200).json({
-      message: result.message || "Test submitted successfully.",
-      ...result.data,
-    });
-
-  } catch (error) {
-    console.error("SAVE TEST SCORE CONTROLLER ERROR:", error);
-
-    return res.status(500).json({
-      error: "Unable to save test score.",
-    });
-  }
-}
-
-
 // export async function saveTestScore(req, res) {
 //   try {
 //     const userId = req.user?.userId;
 
+//     if (!userId) {
+//       return res.status(401).json({
+//         error: "Unauthorized.",
+//       });
+//     }
+
 //     const { studentId } = req.query;
 
-//     const student =
-//       await resolveStudent({
-//         userId,
-//         studentId,
-//       });
+//     // ---------------------------------------------------------
+//     // 1. Resolve and authorize the student
+//     // ---------------------------------------------------------
+//     const studentResult = await resolveStudent({
+//       userId,
+//       studentId,
+//     });
 
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message:
-//           "Student not found.",
-//       });
-//     }
-
-//     const normalizedStudentId =
-//       typeof student.id === "string"
-//         ? student.id.trim()
-//         : "";
-
-//     if (
-//       !normalizedStudentId ||
-//       normalizedStudentId === "null" ||
-//       normalizedStudentId === "undefined"
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Student ID is required.",
+//     if (!studentResult.success) {
+//       return res.status(studentResult.statusCode).json({
+//         error: studentResult.message,
 //       });
 //     }
 
-//     /*
-//      * ========================================================
-//      * 2. REQUEST BODY
-//      * ========================================================
-//      */
+//     const student = studentResult.student;
 
+//     // ---------------------------------------------------------
+//     // 2. Read request body
+//     // ---------------------------------------------------------
 //     const {
 //       subjectId,
 //       termId,
 //       noOfQuestions,
 //       answers,
+//       quizId = null,
 //     } = req.body;
 
-//     /*
-//      * ========================================================
-//      * 3. BASIC VALIDATION
-//      * ========================================================
-//      */
-
-//     if (
-//       !subjectId ||
-//       typeof subjectId !== "string"
-//     ) {
+//     // ---------------------------------------------------------
+//     // 3. Basic request validation
+//     // ---------------------------------------------------------
+//     if (!subjectId) {
 //       return res.status(400).json({
-//         success: false,
-//         message: "subjectId is required.",
+//         error: "subjectId is required.",
+//       });
+//     }
+
+//     if (!termId) {
+//       return res.status(400).json({
+//         error: "termId is required.",
 //       });
 //     }
 
 //     if (
-//       !termId ||
-//       typeof termId !== "string"
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "termId is required.",
-//       });
-//     }
-
-//     if (
-//       typeof noOfQuestions !== "number" ||
 //       !Number.isInteger(noOfQuestions) ||
 //       noOfQuestions <= 0
 //     ) {
 //       return res.status(400).json({
-//         success: false,
-//         message:
-//           "noOfQuestions must be a positive integer.",
+//         error: "noOfQuestions must be a positive integer.",
 //       });
 //     }
 
 //     if (!Array.isArray(answers)) {
 //       return res.status(400).json({
-//         success: false,
-//         message: "Answers must be an array.",
+//         error: "answers must be an array.",
 //       });
 //     }
 
-//     if (answers.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "No answers were submitted.",
+//     // ---------------------------------------------------------
+//     // 4. Process and grade the test
+//     // ---------------------------------------------------------
+//     const result = await processTestSubmission({
+//       studentId: student.id,
+//       subjectId,
+//       termId,
+//       noOfQuestions,
+//       answers,
+//       quizId,
+//     });
+
+//     // ---------------------------------------------------------
+//     // 5. Return service result
+//     // ---------------------------------------------------------
+//     if (!result.success) {
+//       return res.status(result.statusCode).json({
+//         error: result.message,
 //       });
 //     }
-
-//     /*
-//      * ========================================================
-//      * 4. VALIDATE ANSWER OBJECTS
-//      * ========================================================
-//      */
-
-//     const invalidAnswer = answers.find(
-//       (item) => {
-//         if (!item) {
-//           return true;
-//         }
-
-//         if (
-//           typeof item.questionId !==
-//             "string" ||
-//           !item.questionId.trim()
-//         ) {
-//           return true;
-//         }
-
-//         if (
-//           typeof item.topicId !==
-//             "string" ||
-//           !item.topicId.trim()
-//         ) {
-//           return true;
-//         }
-
-//         if (
-//           item.answer !== null &&
-//           typeof item.answer !== "string"
-//         ) {
-//           return true;
-//         }
-
-//         return false;
-//       }
-//     );
-
-//     if (invalidAnswer) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "One or more submitted answers are invalid.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 5. NORMALIZE QUESTION IDS
-//      * ========================================================
-//      */
-
-//     const uniqueQuestionIds = [
-//       ...new Set(
-//         answers.map((item) =>
-//           item.questionId.trim()
-//         )
-//       ),
-//     ];
-
-//     if (
-//       noOfQuestions !==
-//       uniqueQuestionIds.length
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "noOfQuestions does not match the number of submitted questions.",
-//         submittedQuestions:
-//           noOfQuestions,
-//         actualQuestions:
-//           uniqueQuestionIds.length,
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 6. FETCH SUBJECT AND TERM
-//      *
-//      * These queries are deliberately outside the
-//      * transaction.
-//      * ========================================================
-//      */
-
-//     const [
-//       subject,
-//       term,
-//     ] = await Promise.all([
-//       db.student.findUnique({
-//         where: {
-//           id: normalizedStudentId,
-//         },
-
-//         select: {
-//           id: true,
-//           classId: true,
-//         },
-//       }),
-
-//       db.subject.findUnique({
-//         where: {
-//           id: subjectId,
-//         },
-
-//         select: {
-//           id: true,
-//           name: true,
-//         },
-//       }),
-
-//       db.term.findUnique({
-//         where: {
-//           id: termId,
-//         },
-
-//         select: {
-//           id: true,
-//           name: true,
-//         },
-//       }),
-//     ]);
-
-//     if (!subject) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Subject not found.",
-//       });
-//     }
-
-//     if (!term) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Term not found.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 7. FETCH QUESTIONS
-//      *
-//      * Question does not have topicId directly.
-//      *
-//      * Question → Quiz → Topic
-//      * ========================================================
-//      */
-
-//     const questions =
-//       await db.question.findMany({
-//         where: {
-//           id: {
-//             in: uniqueQuestionIds,
-//           },
-//         },
-
-//         select: {
-//           id: true,
-//           text: true,
-//           options: true,
-//           correctAnswer: true,
-//           explanation: true,
-//           quizId: true,
-
-//           quiz: {
-//             select: {
-//               id: true,
-//               topicId: true,
-
-//               topic: {
-//                 select: {
-//                   id: true,
-//                   title: true,
-//                   subjectId: true,
-//                   termId: true,
-//                   classId: true,
-//                 },
-//               },
-//             },
-//           },
-//         },
-//       });
-
-//     /*
-//      * ========================================================
-//      * 8. VERIFY ALL QUESTIONS EXIST
-//      * ========================================================
-//      */
-
-//     if (
-//       questions.length !==
-//       uniqueQuestionIds.length
-//     ) {
-//       const foundIds = new Set(
-//         questions.map(
-//           (question) => question.id
-//         )
-//       );
-
-//       const missingQuestionIds =
-//         uniqueQuestionIds.filter(
-//           (id) => !foundIds.has(id)
-//         );
-
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "One or more submitted questions could not be found.",
-//         missingQuestionIds,
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 9. QUESTION LOOKUP MAP
-//      * ========================================================
-//      */
-
-//     const questionMap =
-//       new Map(
-//         questions.map(
-//           (question) => [
-//             question.id,
-//             question,
-//           ]
-//         )
-//       );
-
-//     /*
-//      * ========================================================
-//      * 10. VERIFY QUESTIONS AND THEIR TOPICS
-//      * ========================================================
-//      */
-
-//     for (const question of questions) {
-//       const topic =
-//         question.quiz?.topic;
-
-//       if (!topic) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions are not associated with a valid topic.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Subject verification
-//        */
-
-//       if (
-//         topic.subjectId !== subjectId
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the selected subject.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Class verification
-//        */
-
-//       if (
-//         topic.classId !== student.classId
-//       ) {
-//         return res.status(403).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the student's class.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Term verification
-//        */
-
-//       if (
-//         topic.termId !== termId
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more questions do not belong to the selected term.",
-//           questionId: question.id,
-//         });
-//       }
-
-//       /*
-//        * Verify submitted topicId against
-//        * authoritative database topicId.
-//        */
-
-//       const submittedAnswer =
-//         answers.find(
-//           (item) =>
-//             item.questionId ===
-//             question.id
-//         );
-
-//       if (
-//         !submittedAnswer ||
-//         submittedAnswer.topicId !==
-//           topic.id
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message:
-//             "One or more submitted topic IDs do not match the questions.",
-//           questionId: question.id,
-//         });
-//       }
-//     }
-
-//     /*
-//      * ========================================================
-//      * 11. VERIFY ONE TERM
-//      * ========================================================
-//      */
-
-//     const questionTermIds = [
-//       ...new Set(
-//         questions.map(
-//           (question) =>
-//             question.quiz.topic.termId
-//         )
-//       ),
-//     ];
-
-//     if (
-//       questionTermIds.length !== 1 ||
-//       questionTermIds[0] !== termId
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "All questions in one test must belong to the same term.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 12. VERIFY ONE SUBJECT
-//      * ========================================================
-//      */
-
-//     const questionSubjectIds = [
-//       ...new Set(
-//         questions.map(
-//           (question) =>
-//             question.quiz.topic
-//               .subjectId
-//         )
-//       ),
-//     ];
-
-//     if (
-//       questionSubjectIds.length !== 1 ||
-//       questionSubjectIds[0] !== subjectId
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "All questions must belong to the selected subject.",
-//       });
-//     }
-
-//     /*
-//      * ========================================================
-//      * 13. NORMALIZE ANSWERS
-//      * ========================================================
-//      */
-
-//     const normalizeAnswer = (
-//       value
-//     ) => {
-//       if (
-//         typeof value !== "string"
-//       ) {
-//         return "";
-//       }
-
-//       return value
-//         .trim()
-//         .replace(/\s+/g, " ")
-//         .toLowerCase();
-//     };
-
-//     /*
-//      * ========================================================
-//      * 14. GRADE TEST
-//      *
-//      * IMPORTANT:
-//      *
-//      * score is now the RAW TEST SCORE.
-//      *
-//      * Example:
-//      *
-//      * 15 correct out of 20
-//      *
-//      * score = 15
-//      *
-//      * NOT 75.
-//      * ========================================================
-//      */
-
-//     let correctCount = 0;
-
-//     const gradedResults =
-//       answers.map((submitted) => {
-//         const question =
-//           questionMap.get(
-//             submitted.questionId
-//           );
-
-//         if (!question) {
-//           return {
-//             questionId:
-//               submitted.questionId,
-
-//             selectedAnswer:
-//               submitted.answer,
-
-//             isCorrect: false,
-//           };
-//         }
-
-//         const selectedAnswer =
-//           normalizeAnswer(
-//             submitted.answer
-//           );
-
-//         const correctAnswer =
-//           normalizeAnswer(
-//             question.correctAnswer
-//           );
-
-//         const isCorrect =
-//           selectedAnswer !== "" &&
-//           correctAnswer !== "" &&
-//           selectedAnswer ===
-//             correctAnswer;
-
-//         if (isCorrect) {
-//           correctCount++;
-//         }
-
-//         return {
-//           questionId:
-//             question.id,
-
-//           selectedAnswer:
-//             submitted.answer,
-
-//           isCorrect,
-
-//           correctAnswer:
-//             question.correctAnswer,
-
-//           explanation:
-//             question.explanation ||
-//             undefined,
-//         };
-//       });
-
-//     /*
-//      * ========================================================
-//      * 15. RAW TEST SCORE
-//      * ========================================================
-//      *
-//      * The student's score is the number of
-//      * correct answers.
-//      *
-//      * Example:
-//      *
-//      * 17/20 = score of 17
-//      * 8/10  = score of 8
-//      *
-//      * No percentage conversion.
-//      * ========================================================
-//      */
-
-//     const totalQuestions =
-//       uniqueQuestionIds.length;
-
-//     const score = correctCount;
-
-//     /*
-//      * ========================================================
-//      * 16. BUILD TOPIC STATISTICS
-//      * ========================================================
-//      */
-
-//     const topicStats =
-//       new Map();
-
-//     for (const submitted of answers) {
-//       const question =
-//         questionMap.get(
-//           submitted.questionId
-//         );
-
-//       if (!question) {
-//         continue;
-//       }
-
-//       const topic =
-//         question.quiz.topic;
-
-//       const topicId =
-//         topic.id;
-
-//       if (
-//         !topicStats.has(topicId)
-//       ) {
-//         topicStats.set(
-//           topicId,
-//           {
-//             id: topicId,
-//             title: topic.title,
-
-//             questions: 0,
-//             answered: 0,
-//             correct: 0,
-
-//             attemptedQuestionIds: [],
-//           }
-//         );
-//       }
-
-//       const stats =
-//         topicStats.get(topicId);
-
-//       stats.questions++;
-
-//       const hasAnswer =
-//         typeof submitted.answer ===
-//           "string" &&
-//         submitted.answer.trim()
-//           .length > 0;
-
-//       if (hasAnswer) {
-//         stats.answered++;
-
-//         stats.attemptedQuestionIds.push(
-//           question.id
-//         );
-//       }
-
-//       const selectedAnswer =
-//         normalizeAnswer(
-//           submitted.answer
-//         );
-
-//       const correctAnswer =
-//         normalizeAnswer(
-//           question.correctAnswer
-//         );
-
-//       const isCorrect =
-//         selectedAnswer !== "" &&
-//         correctAnswer !== "" &&
-//         selectedAnswer ===
-//           correctAnswer;
-
-//       if (isCorrect) {
-//         stats.correct++;
-//       }
-//     }
-
-//     /*
-//      * ========================================================
-//      * 17. BUILD NORMALIZED TOPIC RESULTS
-//      *
-//      * Topic score remains a percentage because
-//      * this is topic performance analytics.
-//      *
-//      * The StudentScore test fields remain raw scores.
-//      * ========================================================
-//      */
-
-//     const normalizedTopicResults =
-//       Array.from(
-//         topicStats.values()
-//       ).map((topic) => {
-//         const topicScore =
-//           topic.questions > 0
-//             ? Number(
-//                 (
-//                   (topic.correct /
-//                     topic.questions) *
-//                   100
-//                 ).toFixed(2)
-//               )
-//             : 0;
-
-//         const completionRate =
-//           topic.questions > 0
-//             ? Number(
-//                 (
-//                   (topic.answered /
-//                     topic.questions) *
-//                   100
-//                 ).toFixed(2)
-//               )
-//             : 0;
-
-//         return {
-//           id: topic.id,
-
-//           title: topic.title,
-
-//           questions:
-//             topic.questions,
-
-//           answered:
-//             topic.answered,
-
-//           correct:
-//             topic.correct,
-
-//           score:
-//             topicScore,
-
-//           completionRate,
-
-//           attemptedQuestionIds:
-//             topic.attemptedQuestionIds,
-//         };
-//       });
-
-//     /*
-//      * ========================================================
-//      * 18. TOPIC IDS
-//      * ========================================================
-//      */
-
-//     const topicIds =
-//       normalizedTopicResults.map(
-//         (topic) => topic.id
-//       );
-
-//     /*
-//      * ========================================================
-//      * 19. DATABASE TRANSACTION
-//      *
-//      * Only persistence happens inside the
-//      * transaction.
-//      * ========================================================
-//      */
-
-//     const result =
-//       await db.$transaction(
-//         async (tx) => {
-//           /*
-//            * ==================================================
-//            * GET EXISTING STUDENT SCORE
-//            * ==================================================
-//            */
-
-//           const existingScore =
-//             await tx.studentScore.findUnique(
-//               {
-//                 where: {
-//                   studentId_subjectId_termId:
-//                     {
-//                       studentId:
-//                         normalizedStudentId,
-
-//                       subjectId,
-
-//                       termId,
-//                     },
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * PREVIOUS TEST STATISTICS
-//            * ==================================================
-//            */
-
-//           const previousTestTotalCorrect =
-//             existingScore
-//               ?.testTotalCorrect ?? 0;
-
-//           const previousTestTotalQuestions =
-//             existingScore
-//               ?.testTotalQuestions ?? 0;
-
-//           const previousTestTotalScore =
-//             existingScore
-//               ?.testTotalScore ?? 0;
-
-//           const previousTestCount =
-//             existingScore
-//               ?.testCount ?? 0;
-
-//           const previousTestLowestScore =
-//             existingScore
-//               ?.testLowestScore ?? null;
-
-//           const previousTestHighestScore =
-//             existingScore
-//               ?.testHighestScore ?? null;
-
-//           /*
-//            * ==================================================
-//            * NEW TEST STATISTICS
-//            * ==================================================
-//            */
-
-//           const newTestCount =
-//             previousTestCount + 1;
-
-//           const newTestTotalCorrect =
-//             previousTestTotalCorrect +
-//             correctCount;
-
-//           const newTestTotalQuestions =
-//             previousTestTotalQuestions +
-//             totalQuestions;
-
-//           /*
-//            * ==================================================
-//            * CUMULATIVE RAW TEST SCORE
-//            *
-//            * Example:
-//            *
-//            * Previous = 30
-//            * Current  = 15
-//            *
-//            * New total = 45
-//            * ==================================================
-//            */
-
-//           const newTestTotalScore =
-//             previousTestTotalScore +
-//             score;
-
-//           /*
-//            * ==================================================
-//            * RAW AVERAGE TEST SCORE
-//            *
-//            * IMPORTANT:
-//            *
-//            * This is NOT a percentage.
-//            *
-//            * It is:
-//            *
-//            * total raw score / number of tests
-//            *
-//            * Example:
-//            *
-//            * 15 + 18 + 12 = 45
-//            * 45 / 3 = 15
-//            * ==================================================
-//            */
-
-//           const newTestAverageScore =
-//             newTestCount > 0
-//               ? Number(
-//                   (
-//                     newTestTotalScore /
-//                     newTestCount
-//                   ).toFixed(2)
-//                 )
-//               : 0;
-
-//           /*
-//            * ==================================================
-//            * LOWEST RAW TEST SCORE
-//            * ==================================================
-//            */
-
-//           const newTestLowestScore =
-//             previousTestLowestScore ===
-//               null ||
-//             previousTestLowestScore ===
-//               undefined
-//               ? score
-//               : Math.min(
-//                   previousTestLowestScore,
-//                   score
-//                 );
-
-//           /*
-//            * ==================================================
-//            * HIGHEST RAW TEST SCORE
-//            * ==================================================
-//            */
-
-//           const newTestHighestScore =
-//             previousTestHighestScore ===
-//               null ||
-//             previousTestHighestScore ===
-//               undefined
-//               ? score
-//               : Math.max(
-//                   previousTestHighestScore,
-//                   score
-//                 );
-
-//           /*
-//            * ==================================================
-//            * STUDENT SCORE UPSERT
-//            * ==================================================
-//            */
-
-//           const studentScore =
-//             await tx.studentScore.upsert(
-//               {
-//                 where: {
-//                   studentId_subjectId_termId:
-//                     {
-//                       studentId:
-//                         normalizedStudentId,
-
-//                       subjectId,
-
-//                       termId,
-//                     },
-//                 },
-
-//                 create: {
-//                   studentId:
-//                     normalizedStudentId,
-
-//                   subjectId,
-
-//                   termId,
-
-//                   /*
-//                    * RAW TEST STATISTICS
-//                    */
-
-//                   testTotalCorrect:
-//                     correctCount,
-
-//                   testTotalQuestions:
-//                     totalQuestions,
-
-//                   testTotalScore:
-//                     score,
-
-//                   testAverageScore:
-//                     score,
-
-//                   testLowestScore:
-//                     score,
-
-//                   testHighestScore:
-//                     score,
-
-//                   testCount: 1,
-
-//                   /*
-//                    * TOPIC INFORMATION
-//                    */
-
-//                   testTopics:
-//                     normalizedTopicResults,
-
-//                   noOfTopics:
-//                     normalizedTopicResults.length,
-//                 },
-
-//                 update: {
-//                   /*
-//                    * CUMULATIVE RAW VALUES
-//                    */
-
-//                   testTotalCorrect:
-//                     newTestTotalCorrect,
-
-//                   testTotalQuestions:
-//                     newTestTotalQuestions,
-
-//                   testTotalScore:
-//                     newTestTotalScore,
-
-//                   /*
-//                    * RAW AVERAGE
-//                    */
-
-//                   testAverageScore:
-//                     newTestAverageScore,
-
-//                   /*
-//                    * RAW LOWEST/HIGHEST
-//                    */
-
-//                   testLowestScore:
-//                     newTestLowestScore,
-
-//                   testHighestScore:
-//                     newTestHighestScore,
-
-//                   /*
-//                    * NUMBER OF TESTS
-//                    */
-
-//                   testCount:
-//                     newTestCount,
-
-//                   /*
-//                    * LATEST TOPIC RESULTS
-//                    */
-
-//                   testTopics:
-//                     normalizedTopicResults,
-
-//                   noOfTopics:
-//                     normalizedTopicResults.length,
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * FETCH EXISTING TOPIC ANALYTICS
-//            * ==================================================
-//            */
-
-//           const existingAnalytics =
-//             await tx.topicAnalytics.findMany(
-//               {
-//                 where: {
-//                   studentId:
-//                     normalizedStudentId,
-
-//                   topicId: {
-//                     in: topicIds,
-//                   },
-//                 },
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * TOPIC ANALYTICS LOOKUP
-//            * ==================================================
-//            */
-
-//           const analyticsMap =
-//             new Map(
-//               existingAnalytics.map(
-//                 (analytics) => [
-//                   analytics.topicId,
-//                   analytics,
-//                 ]
-//               )
-//             );
-
-//           /*
-//            * ==================================================
-//            * BUILD TOPIC ANALYTICS OPERATIONS
-//            * ==================================================
-//            */
-
-//           const analyticsOperations =
-//             normalizedTopicResults.map(
-//               (topic) => {
-//                 const existing =
-//                   analyticsMap.get(
-//                     topic.id
-//                   );
-
-//                 const previousQuestions =
-//                   existing
-//                     ?.totalQuestions ?? 0;
-
-//                 const previousCorrect =
-//                   existing
-//                     ?.totalCorrect ?? 0;
-
-//                 const previousTests =
-//                   existing
-//                     ?.testCount ?? 0;
-
-//                 /*
-//                  * Reconstruct previous answered
-//                  * questions from completion rate.
-//                  */
-
-//                 const previousAnswered =
-//                   existing &&
-//                   previousQuestions > 0
-//                     ? (
-//                         existing.completionRate /
-//                         100
-//                       ) *
-//                       previousQuestions
-//                     : 0;
-
-//                 const newQuestions =
-//                   previousQuestions +
-//                   topic.questions;
-
-//                 const newCorrect =
-//                   previousCorrect +
-//                   topic.correct;
-
-//                 const newAnswered =
-//                   previousAnswered +
-//                   topic.answered;
-
-//                 const newTestCount =
-//                   previousTests + 1;
-
-//                 const completionRate =
-//                   newQuestions > 0
-//                     ? Number(
-//                         (
-//                           (newAnswered /
-//                             newQuestions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 const averageScore =
-//                   newQuestions > 0
-//                     ? Number(
-//                         (
-//                           (newCorrect /
-//                             newQuestions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 /*
-//                  * Topic score is still a percentage.
-//                  */
-
-//                 const currentTopicScore =
-//                   topic.questions > 0
-//                     ? Number(
-//                         (
-//                           (topic.correct /
-//                             topic.questions) *
-//                           100
-//                         ).toFixed(2)
-//                       )
-//                     : 0;
-
-//                 const lowestScore =
-//                   existing?.lowestScore !==
-//                     null &&
-//                   existing?.lowestScore !==
-//                     undefined
-//                     ? Math.min(
-//                         existing.lowestScore,
-//                         currentTopicScore
-//                       )
-//                     : currentTopicScore;
-
-//                 const highestScore =
-//                   existing?.highestScore !==
-//                     null &&
-//                   existing?.highestScore !==
-//                     undefined
-//                     ? Math.max(
-//                         existing.highestScore,
-//                         currentTopicScore
-//                       )
-//                     : currentTopicScore;
-
-//                 const attemptedQuestionIds =
-//                   Array.from(
-//                     new Set([
-//                       ...(existing
-//                         ?.attemptedQuestionIds ??
-//                         []),
-
-//                       ...(topic
-//                         .attemptedQuestionIds ??
-//                         []),
-//                     ])
-//                   );
-
-//                 return {
-//                   topic,
-//                   existing,
-
-//                   completionRate,
-
-//                   averageScore,
-
-//                   currentTopicScore,
-
-//                   newQuestions,
-
-//                   newCorrect,
-
-//                   newTestCount,
-
-//                   attemptedQuestionIds,
-
-//                   lowestScore,
-
-//                   highestScore,
-//                 };
-//               }
-//             );
-
-//           /*
-//            * ==================================================
-//            * TOPIC ANALYTICS WRITES
-//            * ==================================================
-//            */
-
-//           const topicAnalyticsResults =
-//             [];
-
-//           for (
-//             const item of
-//               analyticsOperations
-//           ) {
-//             const {
-//               topic,
-//               completionRate,
-//               averageScore,
-//               currentTopicScore,
-
-//               newQuestions,
-//               newCorrect,
-//               newTestCount,
-
-//               attemptedQuestionIds,
-
-//               lowestScore,
-//               highestScore,
-//             } = item;
-
-//             const analytics =
-//               await tx.topicAnalytics.upsert(
-//                 {
-//                   where: {
-//                     studentId_topicId:
-//                       {
-//                         studentId:
-//                           normalizedStudentId,
-
-//                         topicId:
-//                           topic.id,
-//                       },
-//                   },
-
-//                   create: {
-//                     studentId:
-//                       normalizedStudentId,
-
-//                     topicId:
-//                       topic.id,
-
-//                     completionRate:
-//                       topic.completionRate,
-
-//                     averageScore:
-//                       currentTopicScore,
-
-//                     testCount: 1,
-
-//                     totalQuestions:
-//                       topic.questions,
-
-//                     totalCorrect:
-//                       topic.correct,
-
-//                     attemptedQuestionIds:
-//                       topic.attemptedQuestionIds,
-
-//                     lastScore:
-//                       currentTopicScore,
-
-//                     highestScore:
-//                       currentTopicScore,
-
-//                     lowestScore:
-//                       currentTopicScore,
-
-//                     lastAccessed:
-//                       new Date(),
-//                   },
-
-//                   update: {
-//                     completionRate,
-
-//                     averageScore,
-
-//                     testCount:
-//                       newTestCount,
-
-//                     totalQuestions:
-//                       newQuestions,
-
-//                     totalCorrect:
-//                       newCorrect,
-
-//                     attemptedQuestionIds,
-
-//                     lastScore:
-//                       currentTopicScore,
-
-//                     highestScore,
-
-//                     lowestScore,
-
-//                     lastAccessed:
-//                       new Date(),
-//                   },
-//                 }
-//               );
-
-//             topicAnalyticsResults.push(
-//               analytics
-//             );
-//           }
-
-//           /*
-//            * ==================================================
-//            * RETURN TRANSACTION RESULT
-//            * ==================================================
-//            */
-
-//           return {
-//             studentScore,
-
-//             topicAnalytics:
-//               topicAnalyticsResults,
-
-//             testStatistics: {
-//               testTotalCorrect:
-//                 newTestTotalCorrect,
-
-//               testTotalQuestions:
-//                 newTestTotalQuestions,
-
-//               testTotalScore:
-//                 newTestTotalScore,
-
-//               testAverageScore:
-//                 newTestAverageScore,
-
-//               testLowestScore:
-//                 newTestLowestScore,
-
-//               testHighestScore:
-//                 newTestHighestScore,
-
-//               testCount:
-//                 newTestCount,
-//             },
-//           };
-//         },
-
-//         {
-//           /*
-//            * Maximum time Prisma waits to
-//            * obtain a transaction connection.
-//            */
-
-//           maxWait: 5000,
-
-//           /*
-//            * Maximum transaction execution time.
-//            */
-
-//           timeout: 10000,
-//         }
-//       );
-
-//     /*
-//      * ========================================================
-//      * 20. RESPONSE
-//      * ========================================================
-//      */
 
 //     return res.status(200).json({
-//       success: true,
-
-//       message:
-//         "Test graded and saved successfully.",
-
-//       data: {
-//         studentScore:
-//           result.studentScore,
-
-//         topicAnalytics:
-//           result.topicAnalytics,
-
-//         /*
-//          * RAW TEST STATISTICS
-//          */
-
-//         testStatistics:
-//           result.testStatistics,
-
-//         test: {
-//           /*
-//            * CURRENT TEST RAW SCORE
-//            */
-
-//           score,
-
-//           correct:
-//             correctCount,
-
-//           totalQuestions,
-
-//           /*
-//            * Keep percentage out of the
-//            * StudentScore test statistics.
-//            *
-//            * The topic analytics still contain
-//            * their own percentage values.
-//            */
-
-//           termId,
-
-//           subjectId,
-
-//           noOfTopics:
-//             normalizedTopicResults.length,
-
-//           studentId:
-//             normalizedStudentId,
-
-//           results:
-//             gradedResults,
-
-//           topicResults:
-//             normalizedTopicResults,
-//         },
-//       },
+//       message: result.message || "Test submitted successfully.",
+//       ...result.data,
 //     });
+
 //   } catch (error) {
-//     console.error(
-//       "[saveTestScore] Error:",
-//       error
-//     );
+//     console.error("SAVE TEST SCORE CONTROLLER ERROR:", error);
 
 //     return res.status(500).json({
-//       success: false,
-//       message:
-//         "Failed to grade and save test.",
+//       error: "Unable to save test score.",
 //     });
 //   }
 // }
+
+
+export async function saveTestScore(req, res) {
+  try {
+    const userId = req.user?.userId;
+
+    const { studentId } = req.query;
+
+    const student =
+      await resolveStudent({
+        userId,
+        studentId,
+      });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Student not found.",
+      });
+    }
+
+    const normalizedStudentId =
+      typeof student.id === "string"
+        ? student.id.trim()
+        : "";
+
+    if (
+      !normalizedStudentId ||
+      normalizedStudentId === "null" ||
+      normalizedStudentId === "undefined"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID is required.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 2. REQUEST BODY
+     * ========================================================
+     */
+
+    const {
+      subjectId,
+      termId,
+      noOfQuestions,
+      answers,
+    } = req.body;
+
+    /*
+     * ========================================================
+     * 3. BASIC VALIDATION
+     * ========================================================
+     */
+
+    if (
+      !subjectId ||
+      typeof subjectId !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "subjectId is required.",
+      });
+    }
+
+    if (
+      !termId ||
+      typeof termId !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "termId is required.",
+      });
+    }
+
+    if (
+      typeof noOfQuestions !== "number" ||
+      !Number.isInteger(noOfQuestions) ||
+      noOfQuestions <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "noOfQuestions must be a positive integer.",
+      });
+    }
+
+    if (!Array.isArray(answers)) {
+      return res.status(400).json({
+        success: false,
+        message: "Answers must be an array.",
+      });
+    }
+
+    if (answers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No answers were submitted.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 4. VALIDATE ANSWER OBJECTS
+     * ========================================================
+     */
+
+    const invalidAnswer = answers.find(
+      (item) => {
+        if (!item) {
+          return true;
+        }
+
+        if (
+          typeof item.questionId !==
+            "string" ||
+          !item.questionId.trim()
+        ) {
+          return true;
+        }
+
+        if (
+          typeof item.topicId !==
+            "string" ||
+          !item.topicId.trim()
+        ) {
+          return true;
+        }
+
+        if (
+          item.answer !== null &&
+          typeof item.answer !== "string"
+        ) {
+          return true;
+        }
+
+        return false;
+      }
+    );
+
+    if (invalidAnswer) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "One or more submitted answers are invalid.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 5. NORMALIZE QUESTION IDS
+     * ========================================================
+     */
+
+    const uniqueQuestionIds = [
+      ...new Set(
+        answers.map((item) =>
+          item.questionId.trim()
+        )
+      ),
+    ];
+
+    if (
+      noOfQuestions !==
+      uniqueQuestionIds.length
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "noOfQuestions does not match the number of submitted questions.",
+        submittedQuestions:
+          noOfQuestions,
+        actualQuestions:
+          uniqueQuestionIds.length,
+      });
+    }
+
+    /*
+     * ========================================================
+     * 6. FETCH SUBJECT AND TERM
+     *
+     * These queries are deliberately outside the
+     * transaction.
+     * ========================================================
+     */
+
+    const [
+      subject,
+      term,
+    ] = await Promise.all([
+      db.student.findUnique({
+        where: {
+          id: normalizedStudentId,
+        },
+
+        select: {
+          id: true,
+          classId: true,
+        },
+      }),
+
+      db.subject.findUnique({
+        where: {
+          id: subjectId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+
+      db.term.findUnique({
+        where: {
+          id: termId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+    ]);
+
+    if (!subject) {
+      return res.status(404).json({
+        success: false,
+        message: "Subject not found.",
+      });
+    }
+
+    if (!term) {
+      return res.status(404).json({
+        success: false,
+        message: "Term not found.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 7. FETCH QUESTIONS
+     *
+     * Question does not have topicId directly.
+     *
+     * Question → Quiz → Topic
+     * ========================================================
+     */
+
+    const questions =
+      await db.question.findMany({
+        where: {
+          id: {
+            in: uniqueQuestionIds,
+          },
+        },
+
+        select: {
+          id: true,
+          text: true,
+          options: true,
+          correctAnswer: true,
+          explanation: true,
+          quizId: true,
+
+          quiz: {
+            select: {
+              id: true,
+              topicId: true,
+
+              topic: {
+                select: {
+                  id: true,
+                  title: true,
+                  subjectId: true,
+                  termId: true,
+                  classId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+    /*
+     * ========================================================
+     * 8. VERIFY ALL QUESTIONS EXIST
+     * ========================================================
+     */
+
+    if (
+      questions.length !==
+      uniqueQuestionIds.length
+    ) {
+      const foundIds = new Set(
+        questions.map(
+          (question) => question.id
+        )
+      );
+
+      const missingQuestionIds =
+        uniqueQuestionIds.filter(
+          (id) => !foundIds.has(id)
+        );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "One or more submitted questions could not be found.",
+        missingQuestionIds,
+      });
+    }
+
+    /*
+     * ========================================================
+     * 9. QUESTION LOOKUP MAP
+     * ========================================================
+     */
+
+    const questionMap =
+      new Map(
+        questions.map(
+          (question) => [
+            question.id,
+            question,
+          ]
+        )
+      );
+
+    /*
+     * ========================================================
+     * 10. VERIFY QUESTIONS AND THEIR TOPICS
+     * ========================================================
+     */
+
+    for (const question of questions) {
+      const topic =
+        question.quiz?.topic;
+
+      if (!topic) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "One or more questions are not associated with a valid topic.",
+          questionId: question.id,
+        });
+      }
+
+      /*
+       * Subject verification
+       */
+
+      if (
+        topic.subjectId !== subjectId
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "One or more questions do not belong to the selected subject.",
+          questionId: question.id,
+        });
+      }
+
+      /*
+       * Class verification
+       */
+
+      if (
+        topic.classId !== student.classId
+      ) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "One or more questions do not belong to the student's class.",
+          questionId: question.id,
+        });
+      }
+
+      /*
+       * Term verification
+       */
+
+      if (
+        topic.termId !== termId
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "One or more questions do not belong to the selected term.",
+          questionId: question.id,
+        });
+      }
+
+      /*
+       * Verify submitted topicId against
+       * authoritative database topicId.
+       */
+
+      const submittedAnswer =
+        answers.find(
+          (item) =>
+            item.questionId ===
+            question.id
+        );
+
+      if (
+        !submittedAnswer ||
+        submittedAnswer.topicId !==
+          topic.id
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "One or more submitted topic IDs do not match the questions.",
+          questionId: question.id,
+        });
+      }
+    }
+
+    /*
+     * ========================================================
+     * 11. VERIFY ONE TERM
+     * ========================================================
+     */
+
+    const questionTermIds = [
+      ...new Set(
+        questions.map(
+          (question) =>
+            question.quiz.topic.termId
+        )
+      ),
+    ];
+
+    if (
+      questionTermIds.length !== 1 ||
+      questionTermIds[0] !== termId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "All questions in one test must belong to the same term.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 12. VERIFY ONE SUBJECT
+     * ========================================================
+     */
+
+    const questionSubjectIds = [
+      ...new Set(
+        questions.map(
+          (question) =>
+            question.quiz.topic
+              .subjectId
+        )
+      ),
+    ];
+
+    if (
+      questionSubjectIds.length !== 1 ||
+      questionSubjectIds[0] !== subjectId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "All questions must belong to the selected subject.",
+      });
+    }
+
+    /*
+     * ========================================================
+     * 13. NORMALIZE ANSWERS
+     * ========================================================
+     */
+
+    const normalizeAnswer = (
+      value
+    ) => {
+      if (
+        typeof value !== "string"
+      ) {
+        return "";
+      }
+
+      return value
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+    };
+
+    /*
+     * ========================================================
+     * 14. GRADE TEST
+     *
+     * IMPORTANT:
+     *
+     * score is now the RAW TEST SCORE.
+     *
+     * Example:
+     *
+     * 15 correct out of 20
+     *
+     * score = 15
+     *
+     * NOT 75.
+     * ========================================================
+     */
+
+    let correctCount = 0;
+
+    const gradedResults =
+      answers.map((submitted) => {
+        const question =
+          questionMap.get(
+            submitted.questionId
+          );
+
+        if (!question) {
+          return {
+            questionId:
+              submitted.questionId,
+
+            selectedAnswer:
+              submitted.answer,
+
+            isCorrect: false,
+          };
+        }
+
+        const selectedAnswer =
+          normalizeAnswer(
+            submitted.answer
+          );
+
+        const correctAnswer =
+          normalizeAnswer(
+            question.correctAnswer
+          );
+
+        const isCorrect =
+          selectedAnswer !== "" &&
+          correctAnswer !== "" &&
+          selectedAnswer ===
+            correctAnswer;
+
+        if (isCorrect) {
+          correctCount++;
+        }
+
+        return {
+          questionId:
+            question.id,
+
+          selectedAnswer:
+            submitted.answer,
+
+          isCorrect,
+
+          correctAnswer:
+            question.correctAnswer,
+
+          explanation:
+            question.explanation ||
+            undefined,
+        };
+      });
+
+    /*
+     * ========================================================
+     * 15. RAW TEST SCORE
+     * ========================================================
+     *
+     * The student's score is the number of
+     * correct answers.
+     *
+     * Example:
+     *
+     * 17/20 = score of 17
+     * 8/10  = score of 8
+     *
+     * No percentage conversion.
+     * ========================================================
+     */
+
+    const totalQuestions =
+      uniqueQuestionIds.length;
+
+    const score = correctCount;
+
+    /*
+     * ========================================================
+     * 16. BUILD TOPIC STATISTICS
+     * ========================================================
+     */
+
+    const topicStats =
+      new Map();
+
+    for (const submitted of answers) {
+      const question =
+        questionMap.get(
+          submitted.questionId
+        );
+
+      if (!question) {
+        continue;
+      }
+
+      const topic =
+        question.quiz.topic;
+
+      const topicId =
+        topic.id;
+
+      if (
+        !topicStats.has(topicId)
+      ) {
+        topicStats.set(
+          topicId,
+          {
+            id: topicId,
+            title: topic.title,
+
+            questions: 0,
+            answered: 0,
+            correct: 0,
+
+            attemptedQuestionIds: [],
+          }
+        );
+      }
+
+      const stats =
+        topicStats.get(topicId);
+
+      stats.questions++;
+
+      const hasAnswer =
+        typeof submitted.answer ===
+          "string" &&
+        submitted.answer.trim()
+          .length > 0;
+
+      if (hasAnswer) {
+        stats.answered++;
+
+        stats.attemptedQuestionIds.push(
+          question.id
+        );
+      }
+
+      const selectedAnswer =
+        normalizeAnswer(
+          submitted.answer
+        );
+
+      const correctAnswer =
+        normalizeAnswer(
+          question.correctAnswer
+        );
+
+      const isCorrect =
+        selectedAnswer !== "" &&
+        correctAnswer !== "" &&
+        selectedAnswer ===
+          correctAnswer;
+
+      if (isCorrect) {
+        stats.correct++;
+      }
+    }
+
+    /*
+     * ========================================================
+     * 17. BUILD NORMALIZED TOPIC RESULTS
+     *
+     * Topic score remains a percentage because
+     * this is topic performance analytics.
+     *
+     * The StudentScore test fields remain raw scores.
+     * ========================================================
+     */
+
+    const normalizedTopicResults =
+      Array.from(
+        topicStats.values()
+      ).map((topic) => {
+        const topicScore =
+          topic.questions > 0
+            ? Number(
+                (
+                  (topic.correct /
+                    topic.questions) *
+                  100
+                ).toFixed(2)
+              )
+            : 0;
+
+        const completionRate =
+          topic.questions > 0
+            ? Number(
+                (
+                  (topic.answered /
+                    topic.questions) *
+                  100
+                ).toFixed(2)
+              )
+            : 0;
+
+        return {
+          id: topic.id,
+
+          title: topic.title,
+
+          questions:
+            topic.questions,
+
+          answered:
+            topic.answered,
+
+          correct:
+            topic.correct,
+
+          score:
+            topicScore,
+
+          completionRate,
+
+          attemptedQuestionIds:
+            topic.attemptedQuestionIds,
+        };
+      });
+
+    /*
+     * ========================================================
+     * 18. TOPIC IDS
+     * ========================================================
+     */
+
+    const topicIds =
+      normalizedTopicResults.map(
+        (topic) => topic.id
+      );
+
+    /*
+     * ========================================================
+     * 19. DATABASE TRANSACTION
+     *
+     * Only persistence happens inside the
+     * transaction.
+     * ========================================================
+     */
+
+    const result =
+      await db.$transaction(
+        async (tx) => {
+          /*
+           * ==================================================
+           * GET EXISTING STUDENT SCORE
+           * ==================================================
+           */
+
+          const existingScore =
+            await tx.studentScore.findUnique(
+              {
+                where: {
+                  studentId_subjectId_termId:
+                    {
+                      studentId:
+                        normalizedStudentId,
+
+                      subjectId,
+
+                      termId,
+                    },
+                },
+              }
+            );
+
+          /*
+           * ==================================================
+           * PREVIOUS TEST STATISTICS
+           * ==================================================
+           */
+
+          const previousTestTotalCorrect =
+            existingScore
+              ?.testTotalCorrect ?? 0;
+
+          const previousTestTotalQuestions =
+            existingScore
+              ?.testTotalQuestions ?? 0;
+
+          const previousTestTotalScore =
+            existingScore
+              ?.testTotalScore ?? 0;
+
+          const previousTestCount =
+            existingScore
+              ?.testCount ?? 0;
+
+          const previousTestLowestScore =
+            existingScore
+              ?.testLowestScore ?? null;
+
+          const previousTestHighestScore =
+            existingScore
+              ?.testHighestScore ?? null;
+
+          /*
+           * ==================================================
+           * NEW TEST STATISTICS
+           * ==================================================
+           */
+
+          const newTestCount =
+            previousTestCount + 1;
+
+          const newTestTotalCorrect =
+            previousTestTotalCorrect +
+            correctCount;
+
+          const newTestTotalQuestions =
+            previousTestTotalQuestions +
+            totalQuestions;
+
+          /*
+           * ==================================================
+           * CUMULATIVE RAW TEST SCORE
+           *
+           * Example:
+           *
+           * Previous = 30
+           * Current  = 15
+           *
+           * New total = 45
+           * ==================================================
+           */
+
+          const newTestTotalScore =
+            previousTestTotalScore +
+            score;
+
+          /*
+           * ==================================================
+           * RAW AVERAGE TEST SCORE
+           *
+           * IMPORTANT:
+           *
+           * This is NOT a percentage.
+           *
+           * It is:
+           *
+           * total raw score / number of tests
+           *
+           * Example:
+           *
+           * 15 + 18 + 12 = 45
+           * 45 / 3 = 15
+           * ==================================================
+           */
+
+          const newTestAverageScore =
+            newTestCount > 0
+              ? Number(
+                  (
+                    newTestTotalScore /
+                    newTestCount
+                  ).toFixed(2)
+                )
+              : 0;
+
+          /*
+           * ==================================================
+           * LOWEST RAW TEST SCORE
+           * ==================================================
+           */
+
+          const newTestLowestScore =
+            previousTestLowestScore ===
+              null ||
+            previousTestLowestScore ===
+              undefined
+              ? score
+              : Math.min(
+                  previousTestLowestScore,
+                  score
+                );
+
+          /*
+           * ==================================================
+           * HIGHEST RAW TEST SCORE
+           * ==================================================
+           */
+
+          const newTestHighestScore =
+            previousTestHighestScore ===
+              null ||
+            previousTestHighestScore ===
+              undefined
+              ? score
+              : Math.max(
+                  previousTestHighestScore,
+                  score
+                );
+
+          /*
+           * ==================================================
+           * STUDENT SCORE UPSERT
+           * ==================================================
+           */
+
+          const studentScore =
+            await tx.studentScore.upsert(
+              {
+                where: {
+                  studentId_subjectId_termId:
+                    {
+                      studentId:
+                        normalizedStudentId,
+
+                      subjectId,
+
+                      termId,
+                    },
+                },
+
+                create: {
+                  studentId:
+                    normalizedStudentId,
+
+                  subjectId,
+
+                  termId,
+
+                  /*
+                   * RAW TEST STATISTICS
+                   */
+
+                  testTotalCorrect:
+                    correctCount,
+
+                  testTotalQuestions:
+                    totalQuestions,
+
+                  testTotalScore:
+                    score,
+
+                  testAverageScore:
+                    score,
+
+                  testLowestScore:
+                    score,
+
+                  testHighestScore:
+                    score,
+
+                  testCount: 1,
+
+                  /*
+                   * TOPIC INFORMATION
+                   */
+
+                  testTopics:
+                    normalizedTopicResults,
+
+                  noOfTopics:
+                    normalizedTopicResults.length,
+                },
+
+                update: {
+                  /*
+                   * CUMULATIVE RAW VALUES
+                   */
+
+                  testTotalCorrect:
+                    newTestTotalCorrect,
+
+                  testTotalQuestions:
+                    newTestTotalQuestions,
+
+                  testTotalScore:
+                    newTestTotalScore,
+
+                  /*
+                   * RAW AVERAGE
+                   */
+
+                  testAverageScore:
+                    newTestAverageScore,
+
+                  /*
+                   * RAW LOWEST/HIGHEST
+                   */
+
+                  testLowestScore:
+                    newTestLowestScore,
+
+                  testHighestScore:
+                    newTestHighestScore,
+
+                  /*
+                   * NUMBER OF TESTS
+                   */
+
+                  testCount:
+                    newTestCount,
+
+                  /*
+                   * LATEST TOPIC RESULTS
+                   */
+
+                  testTopics:
+                    normalizedTopicResults,
+
+                  noOfTopics:
+                    normalizedTopicResults.length,
+                },
+              }
+            );
+
+          /*
+           * ==================================================
+           * FETCH EXISTING TOPIC ANALYTICS
+           * ==================================================
+           */
+
+          const existingAnalytics =
+            await tx.topicAnalytics.findMany(
+              {
+                where: {
+                  studentId:
+                    normalizedStudentId,
+
+                  topicId: {
+                    in: topicIds,
+                  },
+                },
+              }
+            );
+
+          /*
+           * ==================================================
+           * TOPIC ANALYTICS LOOKUP
+           * ==================================================
+           */
+
+          const analyticsMap =
+            new Map(
+              existingAnalytics.map(
+                (analytics) => [
+                  analytics.topicId,
+                  analytics,
+                ]
+              )
+            );
+
+          /*
+           * ==================================================
+           * BUILD TOPIC ANALYTICS OPERATIONS
+           * ==================================================
+           */
+
+          const analyticsOperations =
+            normalizedTopicResults.map(
+              (topic) => {
+                const existing =
+                  analyticsMap.get(
+                    topic.id
+                  );
+
+                const previousQuestions =
+                  existing
+                    ?.totalQuestions ?? 0;
+
+                const previousCorrect =
+                  existing
+                    ?.totalCorrect ?? 0;
+
+                const previousTests =
+                  existing
+                    ?.testCount ?? 0;
+
+                /*
+                 * Reconstruct previous answered
+                 * questions from completion rate.
+                 */
+
+                const previousAnswered =
+                  existing &&
+                  previousQuestions > 0
+                    ? (
+                        existing.completionRate /
+                        100
+                      ) *
+                      previousQuestions
+                    : 0;
+
+                const newQuestions =
+                  previousQuestions +
+                  topic.questions;
+
+                const newCorrect =
+                  previousCorrect +
+                  topic.correct;
+
+                const newAnswered =
+                  previousAnswered +
+                  topic.answered;
+
+                const newTestCount =
+                  previousTests + 1;
+
+                const completionRate =
+                  newQuestions > 0
+                    ? Number(
+                        (
+                          (newAnswered /
+                            newQuestions) *
+                          100
+                        ).toFixed(2)
+                      )
+                    : 0;
+
+                const averageScore =
+                  newQuestions > 0
+                    ? Number(
+                        (
+                          (newCorrect /
+                            newQuestions) *
+                          100
+                        ).toFixed(2)
+                      )
+                    : 0;
+
+                /*
+                 * Topic score is still a percentage.
+                 */
+
+                const currentTopicScore =
+                  topic.questions > 0
+                    ? Number(
+                        (
+                          (topic.correct /
+                            topic.questions) *
+                          100
+                        ).toFixed(2)
+                      )
+                    : 0;
+
+                const lowestScore =
+                  existing?.lowestScore !==
+                    null &&
+                  existing?.lowestScore !==
+                    undefined
+                    ? Math.min(
+                        existing.lowestScore,
+                        currentTopicScore
+                      )
+                    : currentTopicScore;
+
+                const highestScore =
+                  existing?.highestScore !==
+                    null &&
+                  existing?.highestScore !==
+                    undefined
+                    ? Math.max(
+                        existing.highestScore,
+                        currentTopicScore
+                      )
+                    : currentTopicScore;
+
+                const attemptedQuestionIds =
+                  Array.from(
+                    new Set([
+                      ...(existing
+                        ?.attemptedQuestionIds ??
+                        []),
+
+                      ...(topic
+                        .attemptedQuestionIds ??
+                        []),
+                    ])
+                  );
+
+                return {
+                  topic,
+                  existing,
+
+                  completionRate,
+
+                  averageScore,
+
+                  currentTopicScore,
+
+                  newQuestions,
+
+                  newCorrect,
+
+                  newTestCount,
+
+                  attemptedQuestionIds,
+
+                  lowestScore,
+
+                  highestScore,
+                };
+              }
+            );
+
+          /*
+           * ==================================================
+           * TOPIC ANALYTICS WRITES
+           * ==================================================
+           */
+
+          const topicAnalyticsResults =
+            [];
+
+          for (
+            const item of
+              analyticsOperations
+          ) {
+            const {
+              topic,
+              completionRate,
+              averageScore,
+              currentTopicScore,
+
+              newQuestions,
+              newCorrect,
+              newTestCount,
+
+              attemptedQuestionIds,
+
+              lowestScore,
+              highestScore,
+            } = item;
+
+            const analytics =
+              await tx.topicAnalytics.upsert(
+                {
+                  where: {
+                    studentId_topicId:
+                      {
+                        studentId:
+                          normalizedStudentId,
+
+                        topicId:
+                          topic.id,
+                      },
+                  },
+
+                  create: {
+                    studentId:
+                      normalizedStudentId,
+
+                    topicId:
+                      topic.id,
+
+                    completionRate:
+                      topic.completionRate,
+
+                    averageScore:
+                      currentTopicScore,
+
+                    testCount: 1,
+
+                    totalQuestions:
+                      topic.questions,
+
+                    totalCorrect:
+                      topic.correct,
+
+                    attemptedQuestionIds:
+                      topic.attemptedQuestionIds,
+
+                    lastScore:
+                      currentTopicScore,
+
+                    highestScore:
+                      currentTopicScore,
+
+                    lowestScore:
+                      currentTopicScore,
+
+                    lastAccessed:
+                      new Date(),
+                  },
+
+                  update: {
+                    completionRate,
+
+                    averageScore,
+
+                    testCount:
+                      newTestCount,
+
+                    totalQuestions:
+                      newQuestions,
+
+                    totalCorrect:
+                      newCorrect,
+
+                    attemptedQuestionIds,
+
+                    lastScore:
+                      currentTopicScore,
+
+                    highestScore,
+
+                    lowestScore,
+
+                    lastAccessed:
+                      new Date(),
+                  },
+                }
+              );
+
+            topicAnalyticsResults.push(
+              analytics
+            );
+          }
+
+          /*
+           * ==================================================
+           * RETURN TRANSACTION RESULT
+           * ==================================================
+           */
+
+          return {
+            studentScore,
+
+            topicAnalytics:
+              topicAnalyticsResults,
+
+            testStatistics: {
+              testTotalCorrect:
+                newTestTotalCorrect,
+
+              testTotalQuestions:
+                newTestTotalQuestions,
+
+              testTotalScore:
+                newTestTotalScore,
+
+              testAverageScore:
+                newTestAverageScore,
+
+              testLowestScore:
+                newTestLowestScore,
+
+              testHighestScore:
+                newTestHighestScore,
+
+              testCount:
+                newTestCount,
+            },
+          };
+        },
+
+        {
+          /*
+           * Maximum time Prisma waits to
+           * obtain a transaction connection.
+           */
+
+          maxWait: 5000,
+
+          /*
+           * Maximum transaction execution time.
+           */
+
+          timeout: 10000,
+        }
+      );
+
+    /*
+     * ========================================================
+     * 20. RESPONSE
+     * ========================================================
+     */
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        "Test graded and saved successfully.",
+
+      data: {
+        studentScore:
+          result.studentScore,
+
+        topicAnalytics:
+          result.topicAnalytics,
+
+        /*
+         * RAW TEST STATISTICS
+         */
+
+        testStatistics:
+          result.testStatistics,
+
+        test: {
+          /*
+           * CURRENT TEST RAW SCORE
+           */
+
+          score,
+
+          correct:
+            correctCount,
+
+          totalQuestions,
+
+          /*
+           * Keep percentage out of the
+           * StudentScore test statistics.
+           *
+           * The topic analytics still contain
+           * their own percentage values.
+           */
+
+          termId,
+
+          subjectId,
+
+          noOfTopics:
+            normalizedTopicResults.length,
+
+          studentId:
+            normalizedStudentId,
+
+          results:
+            gradedResults,
+
+          topicResults:
+            normalizedTopicResults,
+        },
+      },
+    });
+  } catch (error) {
+    console.error(
+      "[saveTestScore] Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to grade and save test.",
+    });
+  }
+}
 
 export async function saveExamScore(req, res) {
   try {
